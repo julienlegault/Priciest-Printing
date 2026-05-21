@@ -1,0 +1,38 @@
+<svg width="768" height="1024" viewBox="0 0 768 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="outerBg" x1="64" y1="24" x2="704" y2="1000" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#CBE1E9"/>
+      <stop offset="0.45" stop-color="#EFF5F9"/>
+      <stop offset="1" stop-color="#A9C5CF"/>
+    </linearGradient>
+    <linearGradient id="barFill" x1="384" y1="24" x2="384" y2="144" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F7FBFD"/>
+      <stop offset="0.4" stop-color="#DBEAF2"/>
+      <stop offset="1" stop-color="#B9CFDD"/>
+    </linearGradient>
+    <linearGradient id="textboxFill" x1="120" y1="644" x2="672" y2="992" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F5FAFD"/>
+      <stop offset="1" stop-color="#D7E6EE"/>
+    </linearGradient>
+    <filter id="noise" x="-20%" y="-20%" width="140%" height="140%">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" stitchTiles="stitch" result="noise"/>
+      <feColorMatrix in="noise" type="saturate" values="0"/>
+      <feComponentTransfer>
+        <feFuncA type="table" tableValues="0 0.08"/>
+      </feComponentTransfer>
+    </filter>
+  </defs>
+  <rect width="768" height="1024" fill="black"/>
+  <path d="M70 26H698C722 26 742 46 742 70V954L700 998H66C42 998 22 978 22 954V74C22 48.5949 42.5949 28 68 28L70 26Z" fill="url(#outerBg)"/>
+  <rect x="48" y="120" width="656" height="484" fill="black"/>
+  <rect x="42" y="114" width="668" height="496" stroke="white" stroke-width="6"/>
+  <rect x="34" y="38" width="700" height="84" rx="22" fill="url(#barFill)" stroke="#FEFEFE" stroke-width="5"/>
+  <rect x="40" y="44" width="688" height="72" rx="18" stroke="#29333A" stroke-width="3"/>
+  <rect x="34" y="614" width="700" height="76" rx="22" fill="url(#barFill)" stroke="#FEFEFE" stroke-width="5"/>
+  <rect x="40" y="620" width="688" height="64" rx="18" stroke="#29333A" stroke-width="3"/>
+  <rect x="46" y="708" width="664" height="282" fill="url(#textboxFill)" stroke="white" stroke-width="5"/>
+  <g filter="url(#noise)">
+    <rect x="22" y="28" width="720" height="964" fill="#FFFFFF"/>
+    <rect x="46" y="708" width="664" height="282" fill="#FFFFFF"/>
+  </g>
+</svg>
