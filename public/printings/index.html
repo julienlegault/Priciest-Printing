@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>MTG Daily Printings</title>
+  <link rel="stylesheet" href="./style.css" />
+</head>
+<body>
+  <main class="page">
+    <h1>Daily MTG Printings</h1>
+    <p class="subtitle">Guess the set with the most expensive printing of today's card.</p>
+
+    <section id="cardFrame" class="card-frame" aria-live="polite">
+      <p class="loading">Loading card…</p>
+    </section>
+
+    <section class="guess-panel">
+      <div class="guess-row">
+        <input id="setGuessInput" type="text" placeholder="Guess by set name or set code…" autocomplete="off" />
+        <button id="setGuessButton">Guess</button>
+      </div>
+      <ul id="setAutocomplete" class="autocomplete"></ul>
+      <p id="guessStatus" class="status" aria-live="polite"></p>
+    </section>
+
+    <section class="results">
+      <div class="results-header results-row">
+        <span>Set</span>
+        <span>Has Printing</span>
+        <span>Price</span>
+      </div>
+      <div id="resultsGrid"></div>
+    </section>
+  </main>
+
+  <div id="winModal" class="modal hidden" role="dialog" aria-modal="true" aria-labelledby="winTitle">
+    <div class="modal-content">
+      <h2 id="winTitle">You got it!</h2>
+      <p id="winMessage"></p>
+      <img id="winCardImage" alt="Winning card printing" />
+      <button id="closeWinModal">Close</button>
+    </div>
+  </div>
+
+  <script type="module" src="../printings.js"></script>
+</body>
+</html>
