@@ -1,0 +1,149 @@
+body {
+  background: #2f3336;
+  color: #e0e0e0;
+  font-family: system-ui, sans-serif;
+}
+
+.container {
+  max-width: 500px;
+  margin: 40px auto;
+}
+
+.input-row {
+  position: relative;
+  display: flex;
+  gap: 8px;
+}
+
+input {
+  flex: 1;
+  padding: 8px;
+}
+
+button {
+  padding: 8px 12px;
+}
+
+#autocomplete {
+  position: absolute;
+  top: 36px;
+  left: 0;
+  right: 80px;
+  background: #1e1e1e;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  max-height: 240px;
+  overflow-y: auto;
+  border: 1px solid #444;
+  z-index: 10;
+}
+
+#autocomplete li {
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+#autocomplete li:hover {
+  background: #444;
+}
+
+#wheel {
+  margin-top: 30px;
+  height: 300px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  perspective: 800px;
+}
+
+.bar {
+  height: 26px;
+  margin: 3px 0;
+  background: #666;
+  opacity: 0.6;
+  transform-origin: center;
+  text-align: center;
+  position: relative;
+  overflow: visible;
+}
+
+.bar[data-index="0"] {
+  transform: rotateX(50deg);
+  opacity: 0.3;
+}
+
+.bar[data-index="10"] {
+  transform: rotateX(-50deg);
+  opacity: 0.3;
+}
+
+.bar[data-index="1"] {
+  transform: rotateX(35deg);
+  opacity: 0.4;
+}
+
+.bar[data-index="9"] {
+  transform: rotateX(-35deg);
+  opacity:0.4;
+}
+
+.bar[data-index="2"] {
+  transform: rotateX(20deg);
+  opacity: 0.5;
+}
+
+.bar[data-index="8"] {
+  transform:rotateX(-20deg);
+  opacity: 0.5;
+}
+
+.bar.center {
+  background: #888;
+  opacity: 1;
+}
+
+.bar.hint-up::after,
+.bar.hint-down::after {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  bottom: -18px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #e0e0e0;
+}
+
+.bar.hint-up::after {
+  content: "↑";
+}
+
+.bar.hint-down::after {
+  content: "↓";
+}
+
+.bar.correct {
+  background: #2ecc71;
+}
+
+.bar.guess {
+  background: #e74c3c;
+}
+
+.spin-up {
+  animation: spinUp 0.6s ease-out;
+}
+
+.spin-down {
+  animation: spinDown 0.6s ease-out;
+}
+
+@keyframes spinUp {
+  from { transform: translateY(40px); }
+  to { transform: translateY(0); }
+}
+
+@keyframes spinDown {
+  from { transform: translateY(-40px); }
+  to { transform: translateY(0); }
+}
