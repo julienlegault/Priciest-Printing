@@ -29,5 +29,5 @@ jobs:
       - name: Commit updated card list
         uses: stefanzweifel/git-auto-commit-action@v5
         with:
-          commit_message: "Update formatted card list"
+          commit_message: "chore: automated weekly card list update"
           file_pattern: public/formatted_card_list.json

@@ -8,7 +8,7 @@ OUTPUT_FILE = "public/formatted_card_list.json"
 SCRYFALL_BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
 PRICE_THRESHOLD = 12.0
 
-banned_card_names = {
+excluded_card_names = {
     "cleanse",
     "crusade",
     "jihad",
@@ -100,7 +100,7 @@ def build_card_list(
         if not card_name or not oracle_id:
             continue
 
-        if normalize_name(card_name) in banned_card_names:
+        if normalize_name(card_name) in excluded_card_names:
             continue
 
         max_price = max_price_by_oracle_id.get(oracle_id, 0.0)
