@@ -1,0 +1,34 @@
+name: Pull Cards
+
+on:
+  schedule:
+    # Midnight EST Sunday = 05:00 UTC Sunday
+    - cron: "0 5 * * 0"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  pull-cards:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: python -m pip install requests
+
+      - name: Update card list
+        run: python pullCards.py
+
+      - name: Commit updated card list
+        uses: stefanzweifel/git-auto-commit-action@v5
+        with:
+          commit_message: "Update formatted card list"
+          file_pattern: public/formatted_card_list.json
