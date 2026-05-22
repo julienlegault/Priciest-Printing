@@ -1,1 +1,1 @@
-# tempmagicdaily
+# Priciest Printing
