@@ -86,6 +86,16 @@ type DailyPlayRecord = {
 
 type DailyPlayStore = Record<string, DailyPlayRecord>;
 
+type PreparedGameData = {
+  selectedCardName: string;
+  selectedCard: ScryfallCard;
+  printingsBySet: Map<string, PrintingInfo[]>;
+  correctPrinting: PrintingInfo;
+  correctFinish: Finish;
+  correctAnswerKeys: Set<string>;
+  correctSetCodes: Set<string>;
+};
+
 const setGuessInput = document.getElementById("setGuessInput") as HTMLInputElement;
 const finishGuessInput = document.getElementById("finishGuessInput") as HTMLSelectElement;
 const styleGuessInput = document.getElementById("styleGuessInput") as HTMLSelectElement;
@@ -133,6 +143,11 @@ let guessedSetCodesInOrder: string[] = [];
 let guessedSetCodesSeen = new Set<string>();
 let pendingStoredDailyRecord: DailyPlayRecord | null = null;
 let victoryEffectTimeoutId: number | null = null;
+let allSetsPromise: Promise<SetInfo[]> | null = null;
+let dailyPreparedGameDataPromise: Promise<PreparedGameData> | null = null;
+let dailyPreparedDateKey: string | null = null;
+
+const preloadedImageUrls = new Set<string>();
 
 (function initTimelineDragScroll() {
   let isDragging = false;
@@ -409,6 +424,29 @@ function getCardImage(card: ScryfallCard): string | null {
   return card.image_uris?.normal ?? card.card_faces?.[0]?.image_uris?.normal ?? null;
 }
 
+function preloadImage(url: string | null | undefined) {
+  if (!url || preloadedImageUrls.has(url)) {
+    return;
+  }
+  preloadedImageUrls.add(url);
+  const image = new Image();
+  image.src = url;
+}
+
+function preloadSetIcons(sets: SetInfo[]) {
+  for (const set of sets) {
+    preloadImage(set.iconSvgUri);
+  }
+}
+
+function preloadPrintingImages(printingsMap: Map<string, PrintingInfo[]>) {
+  for (const printings of printingsMap.values()) {
+    for (const printing of printings) {
+      preloadImage(printing.imageUrl);
+    }
+  }
+}
+
 function getCardOracle(card: ScryfallCard): string {
   if (card.oracle_text) {
     return card.oracle_text;
@@ -581,6 +619,25 @@ async function fetchAllSets(): Promise<SetInfo[]> {
   }
 
   return [...deduped.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function ensureAllSetsLoaded(): Promise<SetInfo[]> {
+  if (allSets.length) {
+    return allSets;
+  }
+  if (!allSetsPromise) {
+    allSetsPromise = fetchAllSets()
+      .then(sets => {
+        allSets = sets;
+        preloadSetIcons(sets);
+        return sets;
+      })
+      .catch(error => {
+        allSetsPromise = null;
+        throw error;
+      });
+  }
+  return allSetsPromise;
 }
 
 async function fetchAllPrintings(cardName: string): Promise<PrintingInfo[]> {
@@ -1461,7 +1518,7 @@ function handleGuess() {
   submitGuess(guessedSet, guessedFinish, printings[0] ?? null);
 }
 
-async function setupGame(mode: GameMode) {
+async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
   const cardsResponse = await fetch("../formatted_card_list.json");
   if (!cardsResponse.ok) {
     throw new Error("Failed to load card list.");
@@ -1552,29 +1609,60 @@ async function setupGame(mode: GameMode) {
     );
   }
 
-  printingsBySet = selectedPrintingsBySet;
-
-  correctAnswerKeys.clear();
-  for (const key of selectedCorrectAnswerKeys) {
-    correctAnswerKeys.add(key);
-  }
-  correctSetCodes.clear();
-  for (const setCode of selectedCorrectSetCodes) {
-    correctSetCodes.add(setCode);
-  }
-
-  correctPrinting = highestPricePrinting;
-  correctFinish = highestPriceFinish;
-
   const cardResponse = await fetch(`https://api.scryfall.com/cards/named?exact=${encodeURIComponent(selectedCardName)}`);
   if (!cardResponse.ok) {
     throw new Error("Failed to load today's card.");
   }
 
-  selectedCard = (await cardResponse.json()) as ScryfallCard;
-  renderCardFrame(selectedCard);
+  const selectedCardData = (await cardResponse.json()) as ScryfallCard;
+  return {
+    selectedCardName,
+    selectedCard: selectedCardData,
+    printingsBySet: selectedPrintingsBySet,
+    correctPrinting: highestPricePrinting,
+    correctFinish: highestPriceFinish,
+    correctAnswerKeys: selectedCorrectAnswerKeys,
+    correctSetCodes: selectedCorrectSetCodes,
+  };
+}
 
-  allSets = await fetchAllSets();
+async function ensureDailyPreparedGameData(): Promise<PreparedGameData> {
+  const todayKey = getTodayKey();
+  if (dailyPreparedDateKey !== todayKey) {
+    dailyPreparedDateKey = todayKey;
+    dailyPreparedGameDataPromise = null;
+  }
+  if (!dailyPreparedGameDataPromise) {
+    dailyPreparedGameDataPromise = prepareGameData("daily").catch(error => {
+      dailyPreparedGameDataPromise = null;
+      throw error;
+    });
+  }
+  return dailyPreparedGameDataPromise;
+}
+
+async function setupGame(mode: GameMode) {
+  const preparedData = mode === "daily"
+    ? await ensureDailyPreparedGameData()
+    : await prepareGameData(mode);
+
+  selectedCardName = preparedData.selectedCardName;
+  selectedCard = preparedData.selectedCard;
+  printingsBySet = preparedData.printingsBySet;
+  correctPrinting = preparedData.correctPrinting;
+  correctFinish = preparedData.correctFinish;
+  correctAnswerKeys.clear();
+  for (const key of preparedData.correctAnswerKeys) {
+    correctAnswerKeys.add(key);
+  }
+  correctSetCodes.clear();
+  for (const setCode of preparedData.correctSetCodes) {
+    correctSetCodes.add(setCode);
+  }
+
+  renderCardFrame(selectedCard);
+  preloadPrintingImages(printingsBySet);
+  allSets = await ensureAllSetsLoaded();
   if (currentHardMode) {
     setTimeline.classList.add("hidden");
   } else {
@@ -1603,7 +1691,7 @@ function setLoadingState() {
 function resetGameState() {
   selectedCardName = "";
   selectedCard = null;
-  printingsBySet.clear();
+  printingsBySet = new Map<string, PrintingInfo[]>();
   correctPrinting = null;
   correctFinish = "nonfoil";
   correctAnswerKeys.clear();
@@ -1646,6 +1734,17 @@ function showLanding() {
   updateStyleGuessVisibility();
   gameArea.classList.add("hidden");
   modeLanding.classList.remove("hidden");
+}
+
+function warmInitialData() {
+  void ensureAllSetsLoaded().catch(error => {
+    console.error("Failed to preload sets:", error);
+  });
+  void ensureDailyPreparedGameData().then(data => {
+    preloadPrintingImages(data.printingsBySet);
+  }).catch(error => {
+    console.error("Failed to preload daily card:", error);
+  });
 }
 
 async function startGame(mode: GameMode, hardMode: boolean) {
@@ -1730,4 +1829,5 @@ startPracticeMode.addEventListener("click", () => {
   void startGame("practice", currentHardMode);
 });
 
+warmInitialData();
 showLanding();
