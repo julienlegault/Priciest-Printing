@@ -29,9 +29,12 @@ def normalize_name(name: str) -> str:
 
 
 def fetch_bulk_data_index() -> dict[str, Any]:
-    response = requests.get(SCRYFALL_BULK_DATA_URL, timeout=30)
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = requests.get(SCRYFALL_BULK_DATA_URL, timeout=30)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError("Failed to fetch Scryfall bulk data index") from exc
 
 
 def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list[dict[str, Any]]:
@@ -40,9 +43,14 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
         raise RuntimeError(f"Scryfall dataset not found: {dataset_type}")
 
     download_url = dataset["download_uri"]
-    response = requests.get(download_url, timeout=120)
-    response.raise_for_status()
-    return response.json()
+    try:
+        response = requests.get(download_url, timeout=120)
+        response.raise_for_status()
+        return response.json()
+    except requests.RequestException as exc:
+        raise RuntimeError(
+            f"Failed to download Scryfall dataset '{dataset_type}' from {download_url}"
+        ) from exc
 
 
 def parse_price_value(value: str | None) -> float:
