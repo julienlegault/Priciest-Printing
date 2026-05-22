@@ -1648,7 +1648,9 @@ async function setupGame(mode: GameMode) {
 
   selectedCardName = preparedData.selectedCardName;
   selectedCard = preparedData.selectedCard;
-  printingsBySet = preparedData.printingsBySet;
+  printingsBySet = new Map(
+    [...preparedData.printingsBySet.entries()].map(([setCode, printings]) => [setCode, [...printings]]),
+  );
   correctPrinting = preparedData.correctPrinting;
   correctFinish = preparedData.correctFinish;
   correctAnswerKeys.clear();
@@ -1691,7 +1693,7 @@ function setLoadingState() {
 function resetGameState() {
   selectedCardName = "";
   selectedCard = null;
-  printingsBySet = new Map<string, PrintingInfo[]>();
+  printingsBySet.clear();
   correctPrinting = null;
   correctFinish = "nonfoil";
   correctAnswerKeys.clear();
