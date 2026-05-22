@@ -1648,19 +1648,11 @@ async function setupGame(mode: GameMode) {
 
   selectedCardName = preparedData.selectedCardName;
   selectedCard = preparedData.selectedCard;
-  printingsBySet = new Map(
-    [...preparedData.printingsBySet.entries()].map(([setCode, printings]) => [setCode, [...printings]]),
-  );
+  printingsBySet = preparedData.printingsBySet;
   correctPrinting = preparedData.correctPrinting;
   correctFinish = preparedData.correctFinish;
-  correctAnswerKeys.clear();
-  for (const key of preparedData.correctAnswerKeys) {
-    correctAnswerKeys.add(key);
-  }
-  correctSetCodes.clear();
-  for (const setCode of preparedData.correctSetCodes) {
-    correctSetCodes.add(setCode);
-  }
+  correctAnswerKeys = new Set(preparedData.correctAnswerKeys);
+  correctSetCodes = new Set(preparedData.correctSetCodes);
 
   renderCardFrame(selectedCard);
   preloadPrintingImages(printingsBySet);
@@ -1693,11 +1685,11 @@ function setLoadingState() {
 function resetGameState() {
   selectedCardName = "";
   selectedCard = null;
-  printingsBySet.clear();
+  printingsBySet = new Map<string, PrintingInfo[]>();
   correctPrinting = null;
   correctFinish = "nonfoil";
-  correctAnswerKeys.clear();
-  correctSetCodes.clear();
+  correctAnswerKeys = new Set<string>();
+  correctSetCodes = new Set<string>();
   guessedPrintingKeys.clear();
   guessedSetCodesInOrder = [];
   guessedSetCodesSeen.clear();
