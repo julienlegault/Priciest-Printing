@@ -194,7 +194,6 @@ const DAILY_PLAY_STORAGE_KEY = "priciest-printing-daily-plays";
 const DAILY_PLAY_RETENTION_DAYS = 30;
 const NORMAL_ORACLE_CLUE_GUESS_COUNT = 3;
 const HARD_MODE_ORACLE_CLUE_GUESS_COUNT = 8;
-const MINIMUM_WINNING_PRINTING_PRICE = 12;
 const VICTORY_EFFECT_DURATION_MS = 2500;
 const CONFETTI_PIECE_COUNT = 30;
 const CONFETTI_COLORS = ["#75c760", "#f4440a", "#f5d742", "#5fc9f8", "#f871b4", "#ffffff"];
@@ -1589,7 +1588,7 @@ async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
       }
     }
 
-    if (!candidateHighestPricePrinting || candidateHighestPrice < MINIMUM_WINNING_PRINTING_PRICE) {
+    if (!candidateHighestPricePrinting) {
       continue;
     }
 
