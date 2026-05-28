@@ -1604,7 +1604,7 @@ async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
 
   if (!selectedCardName || !selectedPrintingsBySet || !highestPricePrinting) {
     throw new Error(
-      `Could not find a card with a printing valued at $${MINIMUM_WINNING_PRINTING_PRICE} or more after checking ${evaluatedCandidateCount} cards.`,
+      `Could not find a valid card after checking ${evaluatedCandidateCount} cards.`,
     );
   }
 
