@@ -7,6 +7,10 @@ import requests
 OUTPUT_FILE = "public/formatted_card_list.json"
 SCRYFALL_BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
 PRICE_THRESHOLD = 12.0
+SCRYFALL_HEADERS = {
+    "User-Agent": "Priciest-Printing-pullCards/1.0",
+    "Accept": "*/*",
+}
 
 excluded_card_names = {
     "cleanse",
@@ -30,7 +34,7 @@ def normalize_name(name: str) -> str:
 
 def fetch_bulk_data_index() -> dict[str, Any]:
     try:
-        response = requests.get(SCRYFALL_BULK_DATA_URL, timeout=30)
+        response = requests.get(SCRYFALL_BULK_DATA_URL, headers=SCRYFALL_HEADERS, timeout=30)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as exc:
@@ -44,7 +48,7 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
 
     download_url = dataset["download_uri"]
     try:
-        response = requests.get(download_url, timeout=120)
+        response = requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=120)
         response.raise_for_status()
         return response.json()
     except requests.RequestException as exc:
