@@ -9,7 +9,7 @@ SCRYFALL_BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
 PRICE_THRESHOLD = 12.0
 SCRYFALL_HEADERS = {
     "User-Agent": "Priciest-Printing-pullCards/1.0",
-    "Accept": "*/*",
+    "Accept": "application/json",
 }
 
 excluded_card_names = {
