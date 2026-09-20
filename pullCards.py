@@ -1,3 +1,4 @@
+import gzip
 import json
 import re
 from typing import Any
@@ -41,6 +42,17 @@ def fetch_bulk_data_index() -> dict[str, Any]:
         raise RuntimeError("Failed to fetch Scryfall bulk data index") from exc
 
 
+def parse_gzipped_jsonl_response(response: requests.Response) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    with gzip.GzipFile(fileobj=response.raw) as gzipped_stream:
+        for raw_line in gzipped_stream:
+            line = raw_line.strip()
+            if not line:
+                continue
+            cards.append(json.loads(line))
+    return cards
+
+
 def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list[dict[str, Any]]:
     dataset = next((item for item in bulk_index["data"] if item["type"] == dataset_type), None)
     if not dataset:
@@ -48,9 +60,19 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
 
     download_url = dataset["download_uri"]
     try:
-        response = requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=120)
-        response.raise_for_status()
-        return response.json()
+        with requests.get(
+            download_url, headers=SCRYFALL_HEADERS, timeout=120, stream=True
+        ) as response:
+            response.raise_for_status()
+
+            if download_url.endswith(".gz"):
+                return parse_gzipped_jsonl_response(response)
+
+            return response.json()
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Failed to parse Scryfall dataset '{dataset_type}' from {download_url}"
+        ) from exc
     except requests.RequestException as exc:
         raise RuntimeError(
             f"Failed to download Scryfall dataset '{dataset_type}' from {download_url}"
