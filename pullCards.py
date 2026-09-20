@@ -1,4 +1,5 @@
 import gzip
+import io
 import json
 import re
 from typing import Any
@@ -42,15 +43,28 @@ def fetch_bulk_data_index() -> dict[str, Any]:
         raise RuntimeError("Failed to fetch Scryfall bulk data index") from exc
 
 
-def parse_gzipped_jsonl_response(response: requests.Response) -> list[dict[str, Any]]:
+def parse_jsonl_stream(stream: Any) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
-    with gzip.GzipFile(fileobj=response.raw) as gzipped_stream:
-        for raw_line in gzipped_stream:
-            line = raw_line.strip()
-            if not line:
-                continue
-            cards.append(json.loads(line))
+    for raw_line in stream:
+        line = raw_line.strip()
+        if not line:
+            continue
+        cards.append(json.loads(line))
     return cards
+
+
+def is_gzipped_response(response: requests.Response) -> bool:
+    content_type = response.headers.get("Content-Type", "").lower()
+    content_encoding = response.headers.get("Content-Encoding", "").lower()
+    if "gzip" in content_type or "gzip" in content_encoding:
+        return True
+
+    raw_stream = response.raw
+    if not hasattr(raw_stream, "peek"):
+        raw_stream = io.BufferedReader(raw_stream)
+        response.raw = raw_stream
+
+    return raw_stream.peek(2)[:2] == b"\x1f\x8b"
 
 
 def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list[dict[str, Any]]:
@@ -65,10 +79,14 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
         ) as response:
             response.raise_for_status()
 
-            if download_url.endswith(".gz"):
-                return parse_gzipped_jsonl_response(response)
+            if is_gzipped_response(response):
+                with gzip.GzipFile(fileobj=response.raw) as gzipped_stream:
+                    return parse_jsonl_stream(gzipped_stream)
 
-            return response.json()
+            try:
+                return response.json()
+            except json.JSONDecodeError:
+                return parse_jsonl_stream(response.iter_lines())
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(
             f"Failed to parse Scryfall dataset '{dataset_type}' from {download_url}"
