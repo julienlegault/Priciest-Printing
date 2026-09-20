@@ -44,12 +44,13 @@ def fetch_bulk_data_index() -> dict[str, Any]:
 
 def parse_jsonl_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
-    for raw_line in raw_bytes.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
+    for line in get_non_empty_lines(raw_bytes):
         cards.append(json.loads(line))
     return cards
+
+
+def get_non_empty_lines(raw_bytes: bytes) -> list[bytes]:
+    return [line for line in (raw_line.strip() for raw_line in raw_bytes.splitlines()) if line]
 
 
 def parse_bulk_dataset_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
@@ -60,7 +61,9 @@ def parse_bulk_dataset_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
     try:
         parsed_json = json.loads(dataset_bytes)
     except json.JSONDecodeError:
-        return parse_jsonl_bytes(dataset_bytes)
+        if len(get_non_empty_lines(dataset_bytes)) > 1:
+            return parse_jsonl_bytes(dataset_bytes)
+        raise
 
     if not isinstance(parsed_json, list):
         raise RuntimeError("Expected Scryfall bulk dataset to be a JSON array or JSONL archive")
