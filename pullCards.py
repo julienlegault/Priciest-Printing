@@ -86,7 +86,7 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
     if not dataset:
         raise RuntimeError(f"Scryfall dataset not found: {dataset_type}")
 
-    download_url = dataset["download_uri"]
+    download_url = dataset["jsonl_download_uri"]
     try:
         response = requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=120)
         response.raise_for_status()
