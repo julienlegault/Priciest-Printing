@@ -58,17 +58,22 @@ def parse_bulk_dataset_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
     if raw_bytes[:2] == b"\x1f\x8b":
         dataset_bytes = gzip.decompress(raw_bytes)
 
+    non_empty_lines = get_non_empty_lines(dataset_bytes)
+
     try:
         parsed_json = json.loads(dataset_bytes)
     except json.JSONDecodeError:
-        if len(get_non_empty_lines(dataset_bytes)) > 1:
+        if len(non_empty_lines) > 1:
             return parse_jsonl_bytes(dataset_bytes)
         raise
 
-    if not isinstance(parsed_json, list):
-        raise RuntimeError("Expected Scryfall bulk dataset to be a JSON array or JSONL archive")
+    if isinstance(parsed_json, list):
+        return parsed_json
 
-    return parsed_json
+    if len(non_empty_lines) == 1:
+        return [parsed_json]
+
+    raise RuntimeError("Expected Scryfall bulk dataset to be a JSON array or JSONL archive")
 
 
 def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list[dict[str, Any]]:
