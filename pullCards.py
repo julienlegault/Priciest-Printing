@@ -71,7 +71,11 @@ def parse_bulk_dataset_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
     if isinstance(parsed_json, list):
         return parsed_json
 
-    if len(non_empty_lines) == 1 and (b"\n" in dataset_bytes or b"\r" in dataset_bytes):
+    if (
+        len(non_empty_lines) == 1
+        and dataset_bytes.rstrip(b"\r\n") == non_empty_lines[0]
+        and dataset_bytes != non_empty_lines[0]
+    ):
         return parse_jsonl_bytes(dataset_bytes)
 
     raise RuntimeError("Expected Scryfall bulk dataset to be a JSON array or JSONL archive")
