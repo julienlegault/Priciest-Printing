@@ -1,5 +1,4 @@
 import gzip
-import io
 import json
 import re
 from typing import Any
@@ -43,9 +42,9 @@ def fetch_bulk_data_index() -> dict[str, Any]:
         raise RuntimeError("Failed to fetch Scryfall bulk data index") from exc
 
 
-def parse_jsonl_stream(stream: Any) -> list[dict[str, Any]]:
+def parse_jsonl_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
     cards: list[dict[str, Any]] = []
-    for raw_line in stream:
+    for raw_line in raw_bytes.splitlines():
         line = raw_line.strip()
         if not line:
             continue
@@ -53,18 +52,20 @@ def parse_jsonl_stream(stream: Any) -> list[dict[str, Any]]:
     return cards
 
 
-def is_gzipped_response(response: requests.Response) -> bool:
-    content_type = response.headers.get("Content-Type", "").lower()
-    content_encoding = response.headers.get("Content-Encoding", "").lower()
-    if "gzip" in content_type or "gzip" in content_encoding:
-        return True
+def parse_bulk_dataset_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
+    dataset_bytes = raw_bytes
+    if raw_bytes[:2] == b"\x1f\x8b":
+        dataset_bytes = gzip.decompress(raw_bytes)
 
-    raw_stream = response.raw
-    if not hasattr(raw_stream, "peek"):
-        raw_stream = io.BufferedReader(raw_stream)
-        response.raw = raw_stream
+    try:
+        parsed_json = json.loads(dataset_bytes)
+    except json.JSONDecodeError:
+        return parse_jsonl_bytes(dataset_bytes)
 
-    return raw_stream.peek(2)[:2] == b"\x1f\x8b"
+    if not isinstance(parsed_json, list):
+        raise RuntimeError("Expected Scryfall bulk dataset to be a JSON array or JSONL archive")
+
+    return parsed_json
 
 
 def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list[dict[str, Any]]:
@@ -78,15 +79,7 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
             download_url, headers=SCRYFALL_HEADERS, timeout=120, stream=True
         ) as response:
             response.raise_for_status()
-
-            if is_gzipped_response(response):
-                with gzip.GzipFile(fileobj=response.raw) as gzipped_stream:
-                    return parse_jsonl_stream(gzipped_stream)
-
-            try:
-                return response.json()
-            except json.JSONDecodeError:
-                return parse_jsonl_stream(response.iter_lines())
+            return parse_bulk_dataset_bytes(response.content)
     except (OSError, json.JSONDecodeError) as exc:
         raise RuntimeError(
             f"Failed to parse Scryfall dataset '{dataset_type}' from {download_url}"
