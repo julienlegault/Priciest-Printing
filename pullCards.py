@@ -75,9 +75,7 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
 
     download_url = dataset["download_uri"]
     try:
-        with requests.get(
-            download_url, headers=SCRYFALL_HEADERS, timeout=120, stream=True
-        ) as response:
+        with requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=120) as response:
             response.raise_for_status()
             return parse_bulk_dataset_bytes(response.content)
     except (OSError, json.JSONDecodeError) as exc:
