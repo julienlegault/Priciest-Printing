@@ -1,3 +1,4 @@
+import gzip
 import json
 import re
 from typing import Any
@@ -41,6 +42,45 @@ def fetch_bulk_data_index() -> dict[str, Any]:
         raise RuntimeError("Failed to fetch Scryfall bulk data index") from exc
 
 
+def parse_jsonl_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
+    cards: list[dict[str, Any]] = []
+    for line in get_non_empty_lines(raw_bytes):
+        cards.append(json.loads(line))
+    return cards
+
+
+def get_non_empty_lines(raw_bytes: bytes) -> list[bytes]:
+    return [line for line in (raw_line.strip() for raw_line in raw_bytes.splitlines()) if line]
+
+
+def parse_bulk_dataset_bytes(raw_bytes: bytes) -> list[dict[str, Any]]:
+    """Parse Scryfall bulk payload bytes as a gzipped JSONL archive, JSONL, or JSON array."""
+    dataset_bytes = raw_bytes
+    if raw_bytes[:2] == b"\x1f\x8b":
+        dataset_bytes = gzip.decompress(raw_bytes)
+
+    non_empty_lines = get_non_empty_lines(dataset_bytes)
+
+    try:
+        parsed_json = json.loads(dataset_bytes)
+    except json.JSONDecodeError:
+        if len(non_empty_lines) > 1:
+            return parse_jsonl_bytes(dataset_bytes)
+        raise
+
+    if isinstance(parsed_json, list):
+        return parsed_json
+
+    if (
+        len(non_empty_lines) == 1
+        and dataset_bytes.rstrip(b"\r\n") == non_empty_lines[0]
+        and dataset_bytes != non_empty_lines[0]
+    ):
+        return parse_jsonl_bytes(dataset_bytes)
+
+    raise RuntimeError("Expected Scryfall bulk dataset to be a JSON array or JSONL archive")
+
+
 def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list[dict[str, Any]]:
     dataset = next((item for item in bulk_index["data"] if item["type"] == dataset_type), None)
     if not dataset:
@@ -50,7 +90,11 @@ def download_bulk_dataset(dataset_type: str, bulk_index: dict[str, Any]) -> list
     try:
         response = requests.get(download_url, headers=SCRYFALL_HEADERS, timeout=120)
         response.raise_for_status()
-        return response.json()
+        return parse_bulk_dataset_bytes(response.content)
+    except (OSError, json.JSONDecodeError) as exc:
+        raise RuntimeError(
+            f"Failed to parse Scryfall dataset '{dataset_type}' from {download_url}"
+        ) from exc
     except requests.RequestException as exc:
         raise RuntimeError(
             f"Failed to download Scryfall dataset '{dataset_type}' from {download_url}"
