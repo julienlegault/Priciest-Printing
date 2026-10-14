@@ -1299,7 +1299,7 @@ function revealVictory(
   finishGuessInput.disabled = true;
   styleGuessInput.disabled = true;
   setGuessButton.disabled = true;
-  giveUpButton.disabled = true;
+  giveUpButton.classList.add("hidden");
 
   if (!currentHardMode && options.showCondensedTimeline !== false) {
     renderCondensedTimeline();
@@ -1710,7 +1710,7 @@ function resetGameState() {
   finishGuessInput.disabled = false;
   styleGuessInput.disabled = false;
   setGuessButton.disabled = false;
-  giveUpButton.disabled = false;
+  giveUpButton.classList.remove("hidden");
   cardFrame.classList.remove(ANSWER_CARD_FRAME_CLASS);
   shareResultsButton.classList.add("hidden");
   closeVersionPicker();
