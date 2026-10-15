@@ -662,11 +662,6 @@ button:hover {
   color: #10161b;
 }
 
-.result-set-partial-word {
-  background: #e8762c;
-  color: #10161b;
-}
-
 .result-set-incorrect {
   background: #8b2d12;
   color: #ececec;
