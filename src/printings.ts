@@ -125,6 +125,7 @@ const versionPickerTitle = document.getElementById("versionPickerTitle") as HTML
 const versionPickerGrid = document.getElementById("versionPickerGrid") as HTMLElement;
 
 let allSets: SetInfo[] = [];
+let baseSets: SetInfo[] = [];
 let selectedCardName = "";
 let selectedCard: ScryfallCard | null = null;
 let printingsBySet = new Map<string, PrintingInfo[]>();
@@ -621,13 +622,13 @@ async function fetchAllSets(): Promise<SetInfo[]> {
 }
 
 async function ensureAllSetsLoaded(): Promise<SetInfo[]> {
-  if (allSets.length) {
-    return allSets;
+  if (baseSets.length) {
+    return baseSets;
   }
   if (!allSetsPromise) {
     allSetsPromise = fetchAllSets()
       .then(sets => {
-        allSets = sets;
+        baseSets = sets;
         preloadSetIcons(sets);
         return sets;
       })
@@ -683,6 +684,24 @@ async function fetchAllPrintings(cardName: string): Promise<PrintingInfo[]> {
   }
 
   return printings;
+}
+
+function buildSetsForPrintings(sets: SetInfo[], printings: Map<string, PrintingInfo[]>): SetInfo[] {
+  return sets.map(set => {
+    const setPrintings = printings.get(set.code);
+    if (!setPrintings?.length) {
+      return { ...set };
+    }
+    if (set.releaseYear != null && setPrintings.some(p => p.releaseYear === set.releaseYear)) {
+      return { ...set };
+    }
+    const dated = setPrintings.filter(p => p.releaseDate);
+    if (!dated.length) {
+      return { ...set };
+    }
+    const earliest = dated.reduce((a, b) => (a.releaseDate! <= b.releaseDate! ? a : b));
+    return { ...set, releaseDate: earliest.releaseDate, releaseYear: earliest.releaseYear };
+  });
 }
 
 function rankSets(query: string, limit: number): SetInfo[] {
@@ -1641,7 +1660,9 @@ async function setupGame(mode: GameMode) {
 
   renderCardFrame(selectedCard);
   preloadPrintingImages(printingsBySet);
-  allSets = await ensureAllSetsLoaded();
+  allSets = buildSetsForPrintings(await ensureAllSetsLoaded(), printingsBySet);
+  lastSetQuery = "";
+  lastSetResults = [];
   if (currentHardMode) {
     setTimeline.classList.add("hidden");
   } else {
