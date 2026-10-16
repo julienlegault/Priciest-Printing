@@ -1029,29 +1029,16 @@ function getYearShareEmoji(set: SetInfo): string {
   return "🟥";
 }
 
-function getSetMatchClass(guessedSetName: string): "result-set-partial-capitalized" | "result-set-partial-word" | "result-set-incorrect" {
+function getSetMatchClass(guessedSetName: string): "result-set-partial" | "result-set-incorrect" {
   const correctName = correctPrinting?.setName ?? "";
   if (!correctName) return "result-set-incorrect";
 
   const correctWords = new Set(correctName.split(/\s+/).filter(Boolean));
   const guessedWords = guessedSetName.split(/\s+/).filter(Boolean);
 
-  let hasCapitalizedMatch = false;
-  let hasLowercaseMatch = false;
-
-  for (const word of guessedWords) {
-    if (!correctWords.has(word)) continue;
-    const firstChar = word[0];
-    if (firstChar && /^[A-Z]/.test(firstChar)) {
-      hasCapitalizedMatch = true;
-    } else {
-      hasLowercaseMatch = true;
-    }
-  }
-
-  if (hasCapitalizedMatch) return "result-set-partial-capitalized";
-  if (hasLowercaseMatch) return "result-set-partial-word";
-  return "result-set-incorrect";
+  return guessedWords.some((word) => correctWords.has(word))
+    ? "result-set-partial"
+    : "result-set-incorrect";
 }
 
 function getFinishMatchLevel(guessedFinish: Finish, guessedStyle: PrintingStyle | null): "correct" | "partial" | "incorrect" {
@@ -1114,8 +1101,7 @@ function addGuessRow(set: SetInfo, finish: Finish, printing: PrintingInfo | null
   } else {
     const partialClass = getSetMatchClass(set.name);
     setMatchClass = partialClass;
-    if (partialClass === "result-set-partial-capitalized") setShareEmoji = "🟨";
-    else if (partialClass === "result-set-partial-word") setShareEmoji = "🟧";
+    if (partialClass === "result-set-partial") setShareEmoji = "🟨";
     else setShareEmoji = "🟥";
   }
   setCell.className = `result-set ${setMatchClass}`;

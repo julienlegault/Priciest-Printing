@@ -657,13 +657,8 @@ button:hover {
   color: #10161b;
 }
 
-.result-set-partial-capitalized {
+.result-set-partial {
   background: #c9b458;
-  color: #10161b;
-}
-
-.result-set-partial-word {
-  background: #e8762c;
   color: #10161b;
 }
 
