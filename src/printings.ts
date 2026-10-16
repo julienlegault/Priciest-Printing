@@ -1237,9 +1237,14 @@ function renderAnswerCard(printing: PrintingInfo) {
 }
 
 function formatAllPrintingPrice(printing: PrintingInfo): string {
-  const nonfoil = printing.prices.nonfoil !== null ? formatPrice(printing.prices.nonfoil) : "N/A";
-  const foil = printing.prices.foil !== null ? formatPrice(printing.prices.foil) : "N/A";
-  return `Non-foil: ${nonfoil} • Foil: ${foil}`;
+  const parts: string[] = [];
+  if (printing.prices.nonfoil !== null) {
+    parts.push(`Non-foil: ${formatPrice(printing.prices.nonfoil)}`);
+  }
+  if (printing.prices.foil !== null) {
+    parts.push(`Foil: ${formatPrice(printing.prices.foil)}`);
+  }
+  return parts.join(" • ");
 }
 
 function renderAllPrintings() {
@@ -1277,7 +1282,7 @@ function renderAllPrintings() {
 
     const caption = document.createElement("div");
     caption.className = "all-printing-caption";
-    caption.textContent = `${printing.setName} #${printing.collectorNumber} • ${formatAllPrintingPrice(printing)}`;
+    caption.textContent = `${printing.setName} #${printing.collectorNumber}${formatAllPrintingPrice(printing) ? ` • ${formatAllPrintingPrice(printing)}` : ""}`;
     card.appendChild(caption);
     allPrintingsGrid.appendChild(card);
   }
