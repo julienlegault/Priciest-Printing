@@ -29,7 +29,7 @@
         <button id="startDailyMode">Play Daily</button>
         <button id="startPracticeMode">Practice</button>
       </div>
-      <section class="how-to-play menu-how-to-play" aria-label="How to play">
+      <section id="howToPlay" class="how-to-play menu-how-to-play" aria-label="How to play">
         <h2>How to Play</h2>
         <p>Goal: find the set and variant with the highest TCGPlayer price for the shown card.</p>
         <ul>
@@ -79,15 +79,7 @@
         <div id="resultsGrid"></div>
       </section>
 
-      <section class="how-to-play" aria-label="How to play">
-        <h2>How to Play</h2>
-        <p>Goal: find the set and variant with the highest TCGPlayer price for the shown card.</p>
-        <ul>
-          <li><strong>Set</strong>: <span role="img" aria-label="Green square">🟩</span> green = correct set, <span role="img" aria-label="Yellow square">🟨</span> yellow = a full word matches the correct set, <span role="img" aria-label="Red square">🟥</span> red = no match.</li>
-          <li><strong>Price</strong>: heat-map from <span role="img" aria-label="Green square">🟩</span> green (closest) through <span role="img" aria-label="Yellow square">🟨</span> yellow/<span role="img" aria-label="Orange square">🟧</span> orange to <span role="img" aria-label="Red square">🟥</span> red (farthest); dark box = no printing data.</li>
-          <li><strong>Year</strong>: <span role="img" aria-label="Green square">🟩</span> green = exact year, <span role="img" aria-label="Yellow square">🟨</span> yellow = within 2 years, <span role="img" aria-label="Red square">🟥</span> red = farther.</li>
-        </ul>
-      </section>
+      <div id="gameHowToPlaySlot"></div>
 
     </div>
   </main>
