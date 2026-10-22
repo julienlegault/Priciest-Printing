@@ -1,94 +1,35 @@
-import { test as base, expect, Page } from "@playwright/test";
+import { test as base, expect, Browser, Page } from "@playwright/test";
 
-export const CARD_NAME = "Mock Card";
-export const ANSWER_SET = { code: "ans", name: "Mock Omega Edition" };
+export const MAX_GUESSES = 20;
 
-const GREEK = [
-  "Alpha", "Beta", "Gamma", "Delta", "Epsilon", "Zeta", "Eta", "Theta", "Iota", "Kappa",
-  "Lambda", "Mu", "Nu", "Xi", "Omicron", "Pi", "Rho", "Sigma", "Tau", "Upsilon",
-  "Phi", "Chi", "Psi", "Digamma",
-];
+export type Mode = "daily" | "practice";
 
-// 24 wrong sets (more than the 20 allowed guesses) + 1 correct set.
-export const WRONG_SETS = GREEK.map((word, i) => ({
-  code: `w${String(i + 1).padStart(2, "0")}`,
-  name: `Mock ${word} Edition`,
-  uniqueWord: word,
-}));
+export type SetOption = { name: string; code: string };
 
-const ALL_SETS = [...WRONG_SETS, { ...ANSWER_SET, uniqueWord: "Omega" }];
+export type Answer = {
+  set: SetOption;
+  collectorNumber: string;
+  // Names of every set holding a printing tied for the top price.
+  correctSetNames: Set<string>;
+};
 
-function setPayload() {
-  return {
-    object: "list",
-    has_more: false,
-    data: ALL_SETS.map(set => ({
-      code: set.code,
-      name: set.name,
-      set_type: "expansion",
-      released_at: "2015-01-01",
-    })),
-  };
-}
+const SET_LABEL = /^(.*) \(([A-Za-z0-9]+)\)$/;
 
-function cardFor(set: { code: string; name: string }, price: string) {
-  return {
-    id: `id-${set.code}`,
-    name: CARD_NAME,
-    mana_cost: "{1}{U}",
-    type_line: "Creature — Test",
-    oracle_text: "Mock oracle text.",
-    power: "1",
-    toughness: "1",
-    set: set.code,
-    set_name: set.name,
-    collector_number: "1",
-    released_at: set.code === ANSWER_SET.code ? "2020-01-01" : "2015-01-01",
-    prices: { usd: price, usd_foil: null, usd_etched: null },
-    border_color: "black",
-    finishes: ["nonfoil"],
-  };
-}
-
-export async function mockExternalRequests(page: Page) {
-  await page.route("**/formatted_card_list.json", route =>
-    route.fulfill({ json: [CARD_NAME] }));
-  await page.route("https://api.scryfall.com/**", route => {
-    const url = new URL(route.request().url());
-    if (url.pathname === "/sets") {
-      return route.fulfill({ json: setPayload() });
-    }
-    if (url.pathname === "/cards/search") {
-      return route.fulfill({
-        json: {
-          object: "list",
-          has_more: false,
-          data: [
-            ...WRONG_SETS.map(set => cardFor(set, "1.00")),
-            cardFor(ANSWER_SET, "100.00"),
-          ],
-        },
-      });
-    }
-    if (url.pathname === "/cards/named") {
-      return route.fulfill({ json: cardFor(ANSWER_SET, "100.00") });
-    }
-    return route.fulfill({ status: 404, json: {} });
-  });
-  await page.route(/^https:\/\/(svgs|cards)\.scryfall\.io\/.*/, route =>
-    route.fulfill({ status: 200, contentType: "image/svg+xml", body: "<svg xmlns='http://www.w3.org/2000/svg'/>" }));
-}
-
-export async function captureClipboard(page: Page) {
+// Practice mode picks a random card; pin Math.random so the card is the same
+// in the discovery run and the real run.
+async function pinRandom(page: Page) {
   await page.addInitScript(() => {
-    (window as unknown as { __clipboard: string }).__clipboard = "";
+    Math.random = () => 0.5;
+  });
+}
+
+async function captureClipboard(page: Page) {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __clipboard: string };
+    w.__clipboard = "";
     Object.defineProperty(navigator, "clipboard", {
       configurable: true,
-      value: {
-        writeText: async (text: string) => {
-          (window as unknown as { __clipboard: string }).__clipboard = text;
-        },
-      },
+      value: { writeText: async (text: string) => { w.__clipboard = text; } },
     });
   });
 }
@@ -99,21 +40,129 @@ export async function readShareText(page: Page): Promise<string> {
   return page.evaluate(() => (window as unknown as { __clipboard: string }).__clipboard);
 }
 
-export async function startMode(page: Page, mode: "daily" | "practice") {
+export async function startMode(page: Page, mode: Mode) {
   await page.goto("/index.html");
   await page.locator(mode === "daily" ? "#startDailyMode" : "#startPracticeMode").click();
-  await expect(page.locator("#guessStatus")).toHaveText("Start typing a set name or code to guess.");
+  await expect(page.locator("#guessStatus")).toHaveText("Start typing a set name or code to guess.", {
+    timeout: 90_000,
+  });
 }
 
-export async function guessSet(page: Page, query: string) {
-  await page.locator("#setGuessInput").fill(query);
-  await page.locator("#setAutocomplete li").first().waitFor();
+// Types a query and returns the set suggestions the page shows for it.
+export async function getSuggestions(page: Page, query: string): Promise<SetOption[]> {
+  const input = page.locator("#setGuessInput");
+  await input.fill("");
+  await input.fill(query);
+  const items = page.locator("#setAutocomplete li");
+  await items.first().waitFor();
+  const labels = (await items.allTextContents()).map(text => text.trim());
+  return labels.flatMap(label => {
+    const match = SET_LABEL.exec(label);
+    return match ? [{ name: match[1], code: match[2].toLowerCase() }] : [];
+  });
+}
+
+async function findSet(page: Page, name: string): Promise<SetOption> {
+  const found = (await getSuggestions(page, name)).find(set => set.name === name);
+  if (!found) {
+    throw new Error(`Set "${name}" not offered by autocomplete`);
+  }
+  return found;
+}
+
+// Plays a throwaway game and gives up so the page reveals today's answer.
+export async function discoverAnswer(browser: Browser, mode: Mode): Promise<Answer> {
+  const context = await browser.newContext();
+  const page = await context.newPage();
+  try {
+    await pinRandom(page);
+    await startMode(page, mode);
+    await page.locator("#giveUpButton").click();
+    await expect(page.locator("#guessStatus")).toContainText("You gave up.");
+
+    const captions = (await page.locator(".all-printing-caption").allTextContents()).map(c => c.trim());
+    const parsed = captions.map(caption => {
+      const [head, ...rest] = caption.split(" • ");
+      const match = /^(.*) #(\S+)$/.exec(head);
+      return { setName: match?.[1] ?? head, number: match?.[2] ?? "", price: rest.join(" • ") };
+    });
+    // Printings are listed highest price first.
+    const top = parsed[0];
+    const correctSetNames = new Set(parsed.filter(p => p.price === top.price).map(p => p.setName));
+    // The input is disabled once the game is over, so look the set up in a fresh game.
+    const lookupContext = await browser.newContext();
+    try {
+      const lookupPage = await lookupContext.newPage();
+      await pinRandom(lookupPage);
+      await startMode(lookupPage, mode);
+      const set = await findSet(lookupPage, top.setName);
+      return { set, collectorNumber: top.number, correctSetNames };
+    } finally {
+      await lookupContext.close();
+    }
+  } finally {
+    await context.close();
+  }
+}
+
+const answers = new Map<Mode, Promise<Answer>>();
+export function getAnswer(browser: Browser, mode: Mode): Promise<Answer> {
+  let answer = answers.get(mode);
+  if (!answer) {
+    answer = discoverAnswer(browser, mode);
+    answers.set(mode, answer);
+  }
+  return answer;
+}
+
+// Collects set options from the page's autocomplete, skipping correct sets.
+export async function getWrongSets(page: Page, answer: Answer, count: number): Promise<SetOption[]> {
+  const wrong = new Map<string, SetOption>();
+  for (const query of "aeoiurnstlmdcgphbvkw".split("")) {
+    for (const set of await getSuggestions(page, query)) {
+      if (!answer.correctSetNames.has(set.name)) {
+        wrong.set(set.code, set);
+      }
+    }
+    if (wrong.size >= count) {
+      break;
+    }
+  }
+  expect(wrong.size).toBeGreaterThanOrEqual(count);
+  await page.locator("#setGuessInput").fill("");
+  return [...wrong.values()].slice(0, count);
+}
+
+// Guesses a set via the page. When the page asks for a version, picks the
+// given collector number or the first option.
+export async function guessSet(page: Page, set: SetOption, collectorNumber?: string) {
+  const rows = page.locator("#resultsGrid .result-item");
+  const before = await rows.count();
+  const suggestions = await getSuggestions(page, set.name);
+  expect(suggestions.map(s => s.code)).toContain(set.code);
+  await page.locator("#setAutocomplete li").filter({ hasText: `(${set.code.toUpperCase()})` }).first().click();
   await page.locator("#setGuessButton").click();
+
+  const modal = page.locator("#versionPickerModal");
+  await page.waitForFunction(
+    ({ before }) =>
+      !document.getElementById("versionPickerModal")!.classList.contains("hidden") ||
+      document.querySelectorAll("#resultsGrid .result-item").length > before,
+    { before },
+  );
+  if (await modal.isVisible()) {
+    const options = page.locator(".version-option");
+    const option = collectorNumber
+      ? options.filter({ has: page.locator(".version-option-caption", { hasText: new RegExp(`^#${collectorNumber}( |$)`) }) }).first()
+      : options.first();
+    await option.click();
+  }
+  await expect(rows).toHaveCount(before + 1);
 }
 
 export const test = base.extend({
   page: async ({ page }, use) => {
-    await mockExternalRequests(page);
+    await pinRandom(page);
     await captureClipboard(page);
     await use(page);
   },
