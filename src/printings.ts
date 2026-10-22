@@ -1091,10 +1091,6 @@ function renderGuessRecord(guess: GuessRecord) {
   setCell.className = `result-set ${guess.setClass}`;
   appendSetNameNodes(setCell, guess.iconSvgUri, guess.setName, guess.setCode);
 
-  const numberCell = document.createElement("div");
-  numberCell.className = `result-number ${guess.numberClass}`;
-  numberCell.textContent = guess.variantText;
-
   const priceCell = document.createElement("span");
   priceCell.className = "result-price";
   priceCell.textContent = guess.priceText;
@@ -1108,7 +1104,6 @@ function renderGuessRecord(guess: GuessRecord) {
   }
 
   row.appendChild(setCell);
-  row.appendChild(numberCell);
   row.appendChild(priceCell);
   row.appendChild(yearCell);
   resultsGrid.appendChild(row);
@@ -1160,9 +1155,18 @@ function buildGuessRecord(set: SetInfo, printing: PrintingInfo | null, isCorrect
     priceShareEmoji = getPriceShareEmoji(price, winningPrice);
   }
 
+  const setPrintings = printingsBySet.get(set.code) ?? [];
+  const hasMultipleNumbers = new Set(setPrintings.map((p) => p.collectorNumber)).size > 1;
+  const displaySetName = printing && hasMultipleNumbers ? `${set.name} • #${printing.collectorNumber}` : set.name;
+
+  let shareEmoji = getBestShareEmoji(`${setShareEmoji}${numberShareEmoji}${priceShareEmoji}${getYearShareEmoji(set)}`);
+  if (!isCorrect && shareEmoji === "🟩") {
+    shareEmoji = "🟨";
+  }
+
   return {
     setCode: set.code,
-    setName: set.name,
+    setName: displaySetName,
     iconSvgUri: set.iconSvgUri,
     setClass,
     variantText: variantParts.join(" • "),
@@ -1171,7 +1175,7 @@ function buildGuessRecord(set: SetInfo, printing: PrintingInfo | null, isCorrect
     priceColor,
     yearText: formatYearResult(set),
     yearClass: getYearResultClass(set),
-    emoji: getBestShareEmoji(`${setShareEmoji}${numberShareEmoji}${priceShareEmoji}${getYearShareEmoji(set)}`),
+    emoji: shareEmoji,
   };
 }
 
@@ -1766,7 +1770,12 @@ shareResultsButton.addEventListener("click", () => {
   for (let i = 0; i < shareRows.length; i += SHARE_ROW_LENGTH) {
     lines.push(shareRows.slice(i, i + SHARE_ROW_LENGTH).join(""));
   }
-  const header = `Priciest Printing ${getScoreText(currentOutcome, shareRows.length)}`;
+  let header = `Priciest Printing ${getScoreText(currentOutcome, shareRows.length)}`;
+  if (currentOutcome === "gaveup") {
+    header += " - Gave up";
+  } else if (currentOutcome === "loss") {
+    header += " - Ran out of guesses";
+  }
   const shareText = `${header}\n${lines.join("\n")}\n${SHARE_URL}`;
   navigator.clipboard.writeText(shareText).then(() => {
     shareResultsButton.textContent = "Copied!";
