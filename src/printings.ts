@@ -76,12 +76,29 @@ type ScryfallList<T> = {
   next_page?: string;
 };
 
+type GameOutcome = "win" | "loss" | "gaveup";
+
+type GuessRecord = {
+  setCode: string;
+  setName: string;
+  iconSvgUri: string | null;
+  setClass: string;
+  variantText: string;
+  numberClass: string;
+  priceText: string;
+  priceColor: string;
+  yearText: string;
+  yearClass: string;
+  emoji: string;
+};
+
 type DailyPlayRecord = {
   shareRows: string[];
+  guesses?: GuessRecord[];
+  outcome?: GameOutcome;
   cardName?: string;
   priceText?: string;
   imageUrl?: string;
-  hardMode?: boolean;
 };
 
 type DailyPlayStore = Record<string, DailyPlayRecord>;
@@ -91,14 +108,11 @@ type PreparedGameData = {
   selectedCard: ScryfallCard;
   printingsBySet: Map<string, PrintingInfo[]>;
   correctPrinting: PrintingInfo;
-  correctFinish: Finish;
   correctAnswerKeys: Set<string>;
   correctSetCodes: Set<string>;
 };
 
 const setGuessInput = document.getElementById("setGuessInput") as HTMLInputElement;
-const finishGuessInput = document.getElementById("finishGuessInput") as HTMLSelectElement;
-const styleGuessInput = document.getElementById("styleGuessInput") as HTMLSelectElement;
 const setGuessButton = document.getElementById("setGuessButton") as HTMLButtonElement;
 const giveUpButton = document.getElementById("giveUpButton") as HTMLButtonElement;
 const setAutocomplete = document.getElementById("setAutocomplete") as HTMLUListElement;
@@ -107,6 +121,7 @@ const setTimeline = document.getElementById("setTimeline") as HTMLElement;
 const postWinActions = document.getElementById("postWinActions") as HTMLElement;
 const resultsGrid = document.getElementById("resultsGrid") as HTMLElement;
 const guessStatus = document.getElementById("guessStatus") as HTMLElement;
+const guessesRemaining = document.getElementById("guessesRemaining") as HTMLElement;
 const allPrintingsSection = document.getElementById("allPrintingsSection") as HTMLElement;
 const allPrintingsDetails = document.getElementById("allPrintingsDetails") as HTMLDetailsElement;
 const allPrintingsGrid = document.getElementById("allPrintingsGrid") as HTMLElement;
@@ -114,7 +129,6 @@ const modeLanding = document.getElementById("modeLanding") as HTMLElement;
 const gameArea = document.getElementById("gameArea") as HTMLElement;
 const startDailyMode = document.getElementById("startDailyMode") as HTMLButtonElement;
 const startPracticeMode = document.getElementById("startPracticeMode") as HTMLButtonElement;
-const hardModeInput = document.getElementById("hardModeInput") as HTMLInputElement;
 const shareResultsButton = document.getElementById("shareResultsButton") as HTMLButtonElement;
 const homeButton = document.getElementById("homeButton") as HTMLButtonElement;
 const victoryOverlay = document.getElementById("victoryOverlay") as HTMLElement;
@@ -130,15 +144,15 @@ let selectedCardName = "";
 let selectedCard: ScryfallCard | null = null;
 let printingsBySet = new Map<string, PrintingInfo[]>();
 let correctPrinting: PrintingInfo | null = null;
-let correctFinish: Finish = "nonfoil";
 let correctAnswerKeys = new Set<string>();
 let correctSetCodes = new Set<string>();
 let guessedPrintingKeys = new Set<string>();
+let guessRecords: GuessRecord[] = [];
+let currentOutcome: GameOutcome | null = null;
 let lastSetQuery = "";
 let lastSetResults: SetInfo[] = [];
 let shareRows: string[] = [];
 let currentMode: GameMode = "practice";
-let currentHardMode = false;
 let timelineSetIndexByCode = new Map<string, number>();
 let guessedSetCodesInOrder: string[] = [];
 let guessedSetCodesSeen = new Set<string>();
@@ -194,12 +208,12 @@ const SHARE_URL = "https://www.priciestprinting.com";
 const DAILY_PLAY_STORAGE_KEY = "priciest-printing-daily-plays";
 const DAILY_PLAY_RETENTION_DAYS = 30;
 const NORMAL_ORACLE_CLUE_GUESS_COUNT = 3;
-const HARD_MODE_ORACLE_CLUE_GUESS_COUNT = 8;
 const VICTORY_EFFECT_DURATION_MS = 2500;
 const CONFETTI_PIECE_COUNT = 30;
 const CONFETTI_COLORS = ["#75c760", "#f4440a", "#f5d742", "#5fc9f8", "#f871b4", "#ffffff"];
 const ANSWER_CARD_FRAME_CLASS = "card-frame-answer";
-const MAX_GUESS_COUNT = 15;
+const MAX_GUESS_COUNT = 20;
+const SHARE_ROW_LENGTH = 10;
 
 function seededRandom(seed: number) {
   return () => {
@@ -233,8 +247,29 @@ function getTodayKey() {
   return getEstResetDateKey();
 }
 
-function getDailyRecordKey(dateKey: string, hardMode: boolean): string {
-  return hardMode ? `${dateKey}|hard` : dateKey;
+const SHARE_EMOJI_RANK = ["⬛", "🟥", "🟧", "🟨", "🟩"];
+
+function getBestShareEmoji(emojis: string): string {
+  let best = "";
+  let bestRank = -1;
+  for (const emoji of Array.from(emojis)) {
+    const rank = SHARE_EMOJI_RANK.indexOf(emoji);
+    if (rank > bestRank) {
+      best = emoji;
+      bestRank = rank;
+    }
+  }
+  return best || "⬛";
+}
+
+function isGuessRecord(value: unknown): value is GuessRecord {
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const guess = value as Record<string, unknown>;
+  return ["setCode", "setName", "setClass", "variantText", "numberClass", "priceText", "priceColor", "yearText", "yearClass", "emoji"]
+    .every(key => typeof guess[key] === "string")
+    && (guess.iconSvgUri === null || typeof guess.iconSvgUri === "string");
 }
 
 function loadDailyPlayStore(): DailyPlayStore {
@@ -257,17 +292,29 @@ function loadDailyPlayStore(): DailyPlayStore {
       if (!Array.isArray(rows)) {
         continue;
       }
-      const shareRows = rows.filter((row): row is string => typeof row === "string");
-      const cardName = (value as { cardName?: unknown }).cardName;
-      const priceText = (value as { priceText?: unknown }).priceText;
-      const imageUrl = (value as { imageUrl?: unknown }).imageUrl;
-      const hardMode = (value as { hardMode?: unknown }).hardMode;
+      const shareRows = rows
+        .filter((row): row is string => typeof row === "string")
+        .map(getBestShareEmoji);
+      const record = value as {
+        cardName?: unknown;
+        priceText?: unknown;
+        imageUrl?: unknown;
+        guesses?: unknown;
+        outcome?: unknown;
+      };
+      const guesses = Array.isArray(record.guesses) && record.guesses.every(isGuessRecord)
+        ? (record.guesses as GuessRecord[])
+        : undefined;
+      const outcome = record.outcome === "win" || record.outcome === "loss" || record.outcome === "gaveup"
+        ? record.outcome
+        : undefined;
       store[date] = {
-        shareRows,
-        cardName: typeof cardName === "string" ? cardName : undefined,
-        priceText: typeof priceText === "string" ? priceText : undefined,
-        imageUrl: typeof imageUrl === "string" ? imageUrl : undefined,
-        hardMode: typeof hardMode === "boolean" ? hardMode : undefined,
+        shareRows: guesses ? guesses.map(guess => guess.emoji) : shareRows,
+        guesses,
+        outcome,
+        cardName: typeof record.cardName === "string" ? record.cardName : undefined,
+        priceText: typeof record.priceText === "string" ? record.priceText : undefined,
+        imageUrl: typeof record.imageUrl === "string" ? record.imageUrl : undefined,
       };
     }
     return store;
@@ -291,7 +338,7 @@ function pruneDailyPlayStore(store: DailyPlayStore): DailyPlayStore {
   const todayMs = today.getTime();
 
   const entries = Object.entries(store).filter(([date]) => {
-    const match = /^(\d{4})-(\d{2})-(\d{2})(?:\|hard)?$/.exec(date);
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date);
     if (!match) {
       return false;
     }
@@ -310,24 +357,25 @@ function getDailyPlayRecord(dateKey: string): DailyPlayRecord | null {
   if (Object.keys(prunedStore).length !== Object.keys(store).length) {
     persistDailyPlayStore(prunedStore);
   }
-  return prunedStore[dateKey] ?? prunedStore[`${dateKey}|hard`] ?? null;
+  return prunedStore[dateKey] ?? null;
 }
 
 function saveDailyPlayRecord(
   dateKey: string,
-  shareRowsForDay: string[],
+  guesses: GuessRecord[],
+  outcome: GameOutcome,
   cardName: string,
   priceText: string,
   imageUrl: string | null,
-  hardMode: boolean,
 ) {
   const prunedStore = pruneDailyPlayStore(loadDailyPlayStore());
   prunedStore[dateKey] = {
-    shareRows: [...shareRowsForDay],
+    shareRows: guesses.map(guess => guess.emoji),
+    guesses: [...guesses],
+    outcome,
     cardName,
     priceText,
     imageUrl: imageUrl ?? undefined,
-    hardMode,
   };
   persistDailyPlayStore(prunedStore);
 }
@@ -373,41 +421,15 @@ function maxPrice(...values: Array<number | null>): number | null {
   return numbers.length ? Math.max(...numbers) : null;
 }
 
-function getPrintingPrice(printing: PrintingInfo | null, finish: Finish): number | null {
+function getPrintingPrice(printing: PrintingInfo | null): number | null {
   if (!printing) {
     return null;
   }
-  return printing.prices[finish];
+  return maxPrice(printing.prices.nonfoil, printing.prices.foil);
 }
 
 function getMaxPrintingPrice(printing: PrintingInfo): number {
   return Math.max(printing.prices.nonfoil ?? -1, printing.prices.foil ?? -1);
-}
-
-function formatFinish(finish: Finish): string {
-  return finish === "foil" ? "Foil" : "Non-foil";
-}
-
-function getSelectedFinish(): Finish {
-  const finish = finishGuessInput.value;
-  return finish === "foil" || finish === "nonfoil" ? finish : "nonfoil";
-}
-
-function getSelectedStyle(): PrintingStyle {
-  const style = styleGuessInput.value;
-  return style === "regular" || style === "borderless" || style === "extendedart" ? style : "regular";
-}
-
-function updateStyleGuessVisibility() {
-  const shouldShow = currentHardMode;
-  styleGuessInput.classList.toggle("hidden", !shouldShow);
-  styleGuessInput.disabled = !shouldShow;
-}
-
-function getStyleLabel(style: PrintingStyle): string {
-  if (style === "borderless") return "Borderless";
-  if (style === "extendedart") return "Extended Art";
-  return "Regular";
 }
 
 function getPrintingStyle(card: ScryfallCard): PrintingStyle {
@@ -516,7 +538,7 @@ function renderCardFrame(card: ScryfallCard) {
   const clueLevel = guessedPrintingKeys.size;
   const showManaCost = clueLevel >= 1;
   const showTypeLineAndStats = clueLevel >= 2;
-  const showOracleText = clueLevel >= (currentHardMode ? HARD_MODE_ORACLE_CLUE_GUESS_COUNT : NORMAL_ORACLE_CLUE_GUESS_COUNT);
+  const showOracleText = clueLevel >= NORMAL_ORACLE_CLUE_GUESS_COUNT;
   const manaCost = getCardManaCost(card);
   const typeLine = getCardTypeLine(card);
   const oracleText = getCardOracle(card);
@@ -551,9 +573,6 @@ function renderCardFrame(card: ScryfallCard) {
 
   const textBox = document.createElement("div");
   textBox.className = "card-text-box";
-  if (currentHardMode && !showOracleText) {
-    textBox.classList.add("hidden");
-  }
   if (showOracleText) {
     const oracle = document.createElement("p");
     oracle.className = "card-oracle";
@@ -981,21 +1000,17 @@ function priceHeatColor(guessPrice: number | null, answerPrice: number): string 
   return `rgb(${r}, ${g}, ${b})`;
 }
 
-function getGuessResultText(printing: PrintingInfo | null, finish: Finish): string {
+function getGuessResultText(printing: PrintingInfo | null): string {
   if (!printing) {
     return NO_PRINTING_TEXT;
   }
 
-  const price = getPrintingPrice(printing, finish);
-  if (price !== null) {
-    return formatPrice(price);
-  }
-
-  return finish === "foil" ? "No foil printing" : NO_PRINTING_TEXT;
+  const price = getPrintingPrice(printing);
+  return price !== null ? formatPrice(price) : NO_PRINTING_TEXT;
 }
 
-function getGuessKey(setCode: string, finish: Finish, printing: PrintingInfo | null, style: PrintingStyle | null = null): string {
-  return printing ? `${printing.id}:${finish}` : `${setCode}:missing:${finish}:${style ?? "none"}`;
+function getGuessKey(setCode: string, printing: PrintingInfo | null): string {
+  return printing ? printing.id : `${setCode}:missing`;
 }
 
 function getYearComparisonArrow(guessedYear: number | null, answerYear: number | null): string {
@@ -1060,18 +1075,6 @@ function getSetMatchClass(guessedSetName: string): "result-set-partial" | "resul
     : "result-set-incorrect";
 }
 
-function getFinishMatchLevel(guessedFinish: Finish, guessedStyle: PrintingStyle | null): "correct" | "partial" | "incorrect" {
-  if (!correctPrinting) return "incorrect";
-  const finishMatch = guessedFinish === correctFinish;
-  if (!currentHardMode) {
-    return finishMatch ? "correct" : "incorrect";
-  }
-  const styleMatch = guessedStyle === correctPrinting.style;
-  if (finishMatch && styleMatch) return "correct";
-  if (finishMatch || styleMatch) return "partial";
-  return "incorrect";
-}
-
 function getPrintingOptionCaption(printing: PrintingInfo): string {
   const pieces = [`#${printing.collectorNumber}`];
   if (printing.releaseYear !== null) {
@@ -1080,117 +1083,108 @@ function getPrintingOptionCaption(printing: PrintingInfo): string {
   return pieces.join(" • ");
 }
 
-function pickHardModePrinting(printings: PrintingInfo[], style: PrintingStyle, finish: Finish): PrintingInfo | null {
-  const matches = printings.filter(printing => printing.style === style);
-  if (!matches.length) {
-    return null;
-  }
-  return matches.sort((a, b) => {
-    const aPrice = getPrintingPrice(a, finish);
-    const bPrice = getPrintingPrice(b, finish);
-    if (aPrice !== null && bPrice !== null && aPrice !== bPrice) {
-      return bPrice - aPrice;
-    }
-    if (aPrice !== null && bPrice === null) {
-      return -1;
-    }
-    if (aPrice === null && bPrice !== null) {
-      return 1;
-    }
-    const collectorNumberComparison = a.collectorNumber.localeCompare(b.collectorNumber, undefined, { numeric: true });
-    if (collectorNumberComparison !== 0) {
-      return collectorNumberComparison;
-    }
-    return a.id.localeCompare(b.id);
-  })[0] ?? null;
-}
-
-function addGuessRow(set: SetInfo, finish: Finish, printing: PrintingInfo | null, guessedStyle: PrintingStyle | null = null) {
+function renderGuessRecord(guess: GuessRecord) {
   const row = document.createElement("div");
   row.className = "result-item results-row";
 
-  const isSetCorrect = correctSetCodes.has(set.code);
-
   const setCell = document.createElement("div");
-  let setMatchClass: string;
-  let setShareEmoji: string;
-  if (isSetCorrect) {
-    setMatchClass = "result-set-correct";
-    setShareEmoji = "🟩";
-  } else {
-    const partialClass = getSetMatchClass(set.name);
-    setMatchClass = partialClass;
-    if (partialClass === "result-set-partial") setShareEmoji = "🟨";
-    else setShareEmoji = "🟥";
-  }
-  setCell.className = `result-set ${setMatchClass}`;
-  appendSetNameNodes(setCell, set.iconSvgUri, set.name, set.code);
+  setCell.className = `result-set ${guess.setClass}`;
+  appendSetNameNodes(setCell, guess.iconSvgUri, guess.setName, guess.setCode);
 
   const numberCell = document.createElement("div");
-  const finishLevel = getFinishMatchLevel(finish, guessedStyle);
-  let numberMatchClass: string;
-  let numberShareEmoji: string;
-  if (finishLevel === "correct") {
-    numberMatchClass = "result-number-correct";
-    numberShareEmoji = "🟩";
-  } else if (finishLevel === "partial") {
-    numberMatchClass = "result-number-partial";
-    numberShareEmoji = "🟨";
-  } else {
-    numberMatchClass = "result-number-incorrect";
-    numberShareEmoji = "🟥";
-  }
-  numberCell.className = `result-number ${numberMatchClass}`;
-  const variantParts: string[] = [];
-  if (printing) {
-    variantParts.push(`#${printing.collectorNumber}`);
-    variantParts.push(formatFinish(finish));
-    if (currentHardMode) {
-      variantParts.push(getStyleLabel(printing.style));
-    }
-    variantParts.push(...printing.modifiers);
-  } else {
-    // Occurs when a set has no paper printing for this card (e.g. digital-only or missing data)
-    variantParts.push(formatFinish(finish));
-    if (guessedStyle) {
-      variantParts.push(getStyleLabel(guessedStyle));
-    }
-    variantParts.push("No printing");
-  }
-  numberCell.textContent = variantParts.join(" • ");
+  numberCell.className = `result-number ${guess.numberClass}`;
+  numberCell.textContent = guess.variantText;
 
   const priceCell = document.createElement("span");
   priceCell.className = "result-price";
-  const winningPrice = getPrintingPrice(correctPrinting, correctFinish) ?? 0;
-  let priceShareEmoji: string;
-  if (printing === null) {
-    priceCell.textContent = "";
-    priceCell.style.backgroundColor = "#2a2a2a";
-    priceShareEmoji = "⬛";
-  } else {
-    const price = getPrintingPrice(printing, finish);
-    priceCell.textContent = getGuessResultText(printing, finish);
-    priceCell.style.backgroundColor = priceHeatColor(price, winningPrice);
-    priceShareEmoji = getPriceShareEmoji(price, winningPrice);
-  }
+  priceCell.textContent = guess.priceText;
+  priceCell.style.backgroundColor = guess.priceColor;
 
   const yearCell = document.createElement("span");
   yearCell.className = "result-year";
-  yearCell.textContent = formatYearResult(set);
-  const yearClass = getYearResultClass(set);
-  if (yearClass) {
-    yearCell.classList.add(yearClass);
+  yearCell.textContent = guess.yearText;
+  if (guess.yearClass) {
+    yearCell.classList.add(guess.yearClass);
   }
 
   row.appendChild(setCell);
   row.appendChild(numberCell);
   row.appendChild(priceCell);
   row.appendChild(yearCell);
-
-  const yearEmoji = getYearShareEmoji(set);
-  shareRows.push(`${setShareEmoji}${numberShareEmoji}${priceShareEmoji}${yearEmoji}`);
-
   resultsGrid.appendChild(row);
+}
+
+function buildGuessRecord(set: SetInfo, printing: PrintingInfo | null, isCorrect: boolean): GuessRecord {
+  const isSetCorrect = correctSetCodes.has(set.code);
+
+  let setClass: string;
+  let setShareEmoji: string;
+  if (isSetCorrect) {
+    setClass = "result-set-correct";
+    setShareEmoji = "🟩";
+  } else {
+    setClass = getSetMatchClass(set.name);
+    setShareEmoji = setClass === "result-set-partial" ? "🟨" : "🟥";
+  }
+
+  let numberClass: string;
+  let numberShareEmoji: string;
+  if (isCorrect) {
+    numberClass = "result-number-correct";
+    numberShareEmoji = "🟩";
+  } else if (isSetCorrect) {
+    numberClass = "result-number-partial";
+    numberShareEmoji = "🟨";
+  } else {
+    numberClass = "result-number-incorrect";
+    numberShareEmoji = "🟥";
+  }
+
+  const variantParts: string[] = [];
+  if (printing) {
+    variantParts.push(`#${printing.collectorNumber}`);
+    variantParts.push(...printing.modifiers);
+  } else {
+    // Occurs when a set has no paper printing for this card (e.g. digital-only or missing data)
+    variantParts.push("No printing");
+  }
+
+  const winningPrice = getPrintingPrice(correctPrinting) ?? 0;
+  let priceText = "";
+  let priceColor = "#2a2a2a";
+  let priceShareEmoji = "⬛";
+  if (printing) {
+    const price = getPrintingPrice(printing);
+    priceText = getGuessResultText(printing);
+    priceColor = priceHeatColor(price, winningPrice);
+    priceShareEmoji = getPriceShareEmoji(price, winningPrice);
+  }
+
+  return {
+    setCode: set.code,
+    setName: set.name,
+    iconSvgUri: set.iconSvgUri,
+    setClass,
+    variantText: variantParts.join(" • "),
+    numberClass,
+    priceText,
+    priceColor,
+    yearText: formatYearResult(set),
+    yearClass: getYearResultClass(set),
+    emoji: getBestShareEmoji(`${setShareEmoji}${numberShareEmoji}${priceShareEmoji}${getYearShareEmoji(set)}`),
+  };
+}
+
+function addGuessRow(set: SetInfo, printing: PrintingInfo | null, isCorrect: boolean) {
+  const guess = buildGuessRecord(set, printing, isCorrect);
+  guessRecords.push(guess);
+  shareRows.push(guess.emoji);
+  renderGuessRecord(guess);
+}
+
+function updateGuessesRemaining() {
+  const remaining = Math.max(MAX_GUESS_COUNT - guessedPrintingKeys.size, 0);
+  guessesRemaining.textContent = `${remaining} ${remaining === 1 ? "guess" : "guesses"} remaining`;
 }
 
 function triggerVictoryEffect() {
@@ -1293,25 +1287,25 @@ function renderAllPrintings() {
 
 function revealVictory(
   printing: PrintingInfo,
-  finish: Finish,
+  outcome: GameOutcome,
   message?: string,
-  options: { showCondensedTimeline?: boolean } = {},
+  options: { showCondensedTimeline?: boolean; replay?: boolean } = {},
 ) {
-  const winningPrice = getPrintingPrice(printing, finish);
+  const winningPrice = getPrintingPrice(printing);
   if (winningPrice === null) {
     return;
   }
 
+  currentOutcome = outcome;
   renderAnswerCard(printing);
   renderAllPrintings();
   postWinActions.classList.remove("hidden");
   setGuessInput.disabled = true;
-  finishGuessInput.disabled = true;
-  styleGuessInput.disabled = true;
   setGuessButton.disabled = true;
   giveUpButton.classList.add("hidden");
+  guessesRemaining.classList.add("hidden");
 
-  if (!currentHardMode && options.showCondensedTimeline !== false) {
+  if (options.showCondensedTimeline !== false) {
     renderCondensedTimeline();
   } else {
     setTimeline.classList.add("hidden");
@@ -1320,36 +1314,49 @@ function revealVictory(
   if (message) {
     guessStatus.textContent = message;
   } else {
-    guessStatus.textContent = `Correct! ${selectedCardName}'s highest Scryfall price is the ${formatFinish(finish).toLowerCase()} printing in ${printing.setName} at ${formatPrice(winningPrice)}.`;
+    guessStatus.textContent = `Correct! ${selectedCardName}'s highest Scryfall price is the ${printing.setName} printing at ${formatPrice(winningPrice)}.`;
   }
 
-  if (currentMode === "daily" && !message) {
+  if (currentMode === "daily" && !options.replay) {
     saveDailyPlayRecord(
-      getDailyRecordKey(getTodayKey(), currentHardMode),
-      shareRows,
+      getTodayKey(),
+      guessRecords,
+      outcome,
       selectedCardName,
       formatPrice(winningPrice),
       printing.imageUrl,
-      currentHardMode,
     );
-    shareResultsButton.classList.remove("hidden");
-  } else {
-    shareResultsButton.classList.toggle("hidden", currentMode !== "daily");
   }
+  shareResultsButton.classList.toggle("hidden", currentMode !== "daily");
 
-  triggerVictoryEffect();
+  if (outcome === "win" && !options.replay) {
+    triggerVictoryEffect();
+  }
 }
 
-function showStoredDailyVictory(record: DailyPlayRecord) {
-  const storedHardMode = record.hardMode ?? false;
-  currentHardMode = storedHardMode;
+function getScoreText(outcome: GameOutcome | null, guessCount: number): string {
+  return outcome === "win" ? `${guessCount}/${MAX_GUESS_COUNT}` : `X/${MAX_GUESS_COUNT}`;
+}
+
+function showStoredDailyResult(record: DailyPlayRecord) {
   shareRows = [...record.shareRows];
-  if (correctPrinting) {
-    const message = record.cardName && record.priceText
-      ? `You already completed today's daily. Today's card was ${record.cardName} at ${record.priceText}.`
-      : "You already completed today's daily.";
-    revealVictory(correctPrinting, correctFinish, message, { showCondensedTimeline: false });
+  guessRecords = [...(record.guesses ?? [])];
+  for (const guess of guessRecords) {
+    renderGuessRecord(guess);
   }
+  if (!correctPrinting) {
+    return;
+  }
+  const outcome = record.outcome ?? "win";
+  const score = getScoreText(outcome, shareRows.length);
+  const cardInfo = record.cardName && record.priceText
+    ? ` Today's card was ${record.cardName} at ${record.priceText}.`
+    : "";
+  const verdict = outcome === "win" ? "You solved today's daily" : "You already played today's daily";
+  revealVictory(correctPrinting, outcome, `${verdict}. Score: ${score}.${cardInfo}`, {
+    showCondensedTimeline: false,
+    replay: true,
+  });
   shareResultsButton.classList.remove("hidden");
 }
 
@@ -1389,39 +1396,39 @@ function revealOutOfGuesses() {
 
   revealVictory(
     correctPrinting,
-    correctFinish,
-    `Out of guesses. The answer was ${correctPrinting.setName} ${formatFinish(correctFinish).toLowerCase()}.`,
+    "loss",
+    `Out of guesses. The answer was ${correctPrinting.setName}.`,
   );
   return true;
 }
 
-function submitGuess(guessedSet: SetInfo, guessedFinish: Finish, printing: PrintingInfo | null, guessedStyle: PrintingStyle | null = null) {
+function submitGuess(guessedSet: SetInfo, printing: PrintingInfo | null) {
   if (revealOutOfGuesses()) {
     return;
   }
 
-  const guessedKey = getGuessKey(guessedSet.code, guessedFinish, printing, guessedStyle);
+  const guessedKey = getGuessKey(guessedSet.code, printing);
 
   if (guessedPrintingKeys.has(guessedKey)) {
-    guessStatus.textContent = "You already guessed that version and finish.";
+    guessStatus.textContent = "You already guessed that version.";
     clearSetGuess();
     return;
   }
 
+  const isCorrect = correctAnswerKeys.has(guessedKey) && printing !== null;
   trackGuessedSet(guessedSet.code);
   guessedPrintingKeys.add(guessedKey);
-  addGuessRow(guessedSet, guessedFinish, printing, guessedStyle);
-  if (!currentHardMode) {
-    updateSetTimelineItem(guessedSet.code, correctSetCodes.has(guessedSet.code));
-  }
+  addGuessRow(guessedSet, printing, isCorrect);
+  updateGuessesRemaining();
+  updateSetTimelineItem(guessedSet.code, correctSetCodes.has(guessedSet.code));
   clearSetGuess();
   if (selectedCard) {
     renderCardFrame(selectedCard);
   }
 
-  if (correctAnswerKeys.has(guessedKey) && printing) {
+  if (isCorrect && printing) {
     guessStatus.textContent = "Correct!";
-    revealVictory(printing, guessedFinish);
+    revealVictory(printing, "win");
     return;
   }
 
@@ -1432,9 +1439,7 @@ function submitGuess(guessedSet: SetInfo, guessedFinish: Finish, printing: Print
   guessStatus.replaceChildren();
   appendSetNameNodes(guessStatus, guessedSet.iconSvgUri, guessedSet.name);
   guessStatus.appendChild(
-    document.createTextNode(
-      ` ${formatFinish(guessedFinish).toLowerCase()} was not the highest-price printing. (${guessedPrintingKeys.size}/${MAX_GUESS_COUNT})`,
-    ),
+    document.createTextNode(" was not the highest-price printing."),
   );
 }
 
@@ -1444,12 +1449,12 @@ function handleGiveUp() {
   }
   revealVictory(
     correctPrinting,
-    correctFinish,
-    `You gave up. The answer was ${correctPrinting.setName} ${formatFinish(correctFinish).toLowerCase()}.`,
+    "gaveup",
+    `You gave up. The answer was ${correctPrinting.setName}.`,
   );
 }
 
-function openVersionPicker(guessedSet: SetInfo, guessedFinish: Finish, printings: PrintingInfo[]) {
+function openVersionPicker(guessedSet: SetInfo, printings: PrintingInfo[]) {
   versionPickerTitle.replaceChildren();
   versionPickerTitle.appendChild(document.createTextNode(`Choose ${selectedCardName} in `));
   appendSetNameNodes(versionPickerTitle, guessedSet.iconSvgUri, guessedSet.name);
@@ -1487,7 +1492,7 @@ function openVersionPicker(guessedSet: SetInfo, guessedFinish: Finish, printings
 
     option.addEventListener("click", () => {
       closeVersionPicker();
-      submitGuess(guessedSet, guessedFinish, printing);
+      submitGuess(guessedSet, printing);
     });
 
     versionPickerGrid.appendChild(option);
@@ -1508,23 +1513,15 @@ function handleGuess() {
     return;
   }
 
-  const guessedFinish = getSelectedFinish();
-  const guessedStyle = getSelectedStyle();
   const printings = printingsBySet.get(guessedSet.code) ?? [];
-
-  if (currentHardMode) {
-    const hardModePrinting = pickHardModePrinting(printings, guessedStyle, guessedFinish);
-    submitGuess(guessedSet, guessedFinish, hardModePrinting, guessedStyle);
-    return;
-  }
 
   if (printings.length > 1) {
     guessStatus.textContent = "Choose which version you want to guess.";
-    openVersionPicker(guessedSet, guessedFinish, printings);
+    openVersionPicker(guessedSet, printings);
     return;
   }
 
-  submitGuess(guessedSet, guessedFinish, printings[0] ?? null);
+  submitGuess(guessedSet, printings[0] ?? null);
 }
 
 async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
@@ -1540,7 +1537,6 @@ async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
   const cardCandidates = getCardCandidates(cards, mode);
   let selectedPrintingsBySet: Map<string, PrintingInfo[]> | null = null;
   let highestPricePrinting: PrintingInfo | null = null;
-  let highestPriceFinish: Finish = "nonfoil";
   let highestPrice = -1;
   let selectedCorrectAnswerKeys = new Set<string>();
   let selectedCorrectSetCodes = new Set<string>();
@@ -1561,38 +1557,22 @@ async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
     }
 
     let candidateHighestPricePrinting: PrintingInfo | null = null;
-    let candidateHighestPriceFinish: Finish = "nonfoil";
     let candidateHighestPrice = -1;
     const candidateCorrectAnswerKeys = new Set<string>();
     const candidateCorrectSetCodes = new Set<string>();
 
     for (const printingsInSet of candidatePrintingsBySet.values()) {
       for (const printing of printingsInSet) {
-        const nonfoilPrice = printing.prices.nonfoil;
-        if (nonfoilPrice !== null && nonfoilPrice > candidateHighestPrice) {
-          candidateHighestPrice = nonfoilPrice;
-          candidateHighestPriceFinish = "nonfoil";
+        const price = getPrintingPrice(printing);
+        if (price !== null && price > candidateHighestPrice) {
+          candidateHighestPrice = price;
           candidateHighestPricePrinting = printing;
           candidateCorrectAnswerKeys.clear();
           candidateCorrectSetCodes.clear();
-          candidateCorrectAnswerKeys.add(getGuessKey(printing.setCode, "nonfoil", printing));
+          candidateCorrectAnswerKeys.add(getGuessKey(printing.setCode, printing));
           candidateCorrectSetCodes.add(printing.setCode);
-        } else if (nonfoilPrice !== null && nonfoilPrice === candidateHighestPrice) {
-          candidateCorrectAnswerKeys.add(getGuessKey(printing.setCode, "nonfoil", printing));
-          candidateCorrectSetCodes.add(printing.setCode);
-        }
-
-        const foilPrice = printing.prices.foil;
-        if (foilPrice !== null && foilPrice > candidateHighestPrice) {
-          candidateHighestPrice = foilPrice;
-          candidateHighestPriceFinish = "foil";
-          candidateHighestPricePrinting = printing;
-          candidateCorrectAnswerKeys.clear();
-          candidateCorrectSetCodes.clear();
-          candidateCorrectAnswerKeys.add(getGuessKey(printing.setCode, "foil", printing));
-          candidateCorrectSetCodes.add(printing.setCode);
-        } else if (foilPrice !== null && foilPrice === candidateHighestPrice) {
-          candidateCorrectAnswerKeys.add(getGuessKey(printing.setCode, "foil", printing));
+        } else if (price !== null && price === candidateHighestPrice) {
+          candidateCorrectAnswerKeys.add(getGuessKey(printing.setCode, printing));
           candidateCorrectSetCodes.add(printing.setCode);
         }
       }
@@ -1605,7 +1585,6 @@ async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
     selectedCardName = cardCandidate;
     selectedPrintingsBySet = candidatePrintingsBySet;
     highestPricePrinting = candidateHighestPricePrinting;
-    highestPriceFinish = candidateHighestPriceFinish;
     highestPrice = candidateHighestPrice;
     selectedCorrectAnswerKeys = candidateCorrectAnswerKeys;
     selectedCorrectSetCodes = candidateCorrectSetCodes;
@@ -1629,7 +1608,6 @@ async function prepareGameData(mode: GameMode): Promise<PreparedGameData> {
     selectedCard: selectedCardData,
     printingsBySet: selectedPrintingsBySet,
     correctPrinting: highestPricePrinting,
-    correctFinish: highestPriceFinish,
     correctAnswerKeys: selectedCorrectAnswerKeys,
     correctSetCodes: selectedCorrectSetCodes,
   };
@@ -1659,7 +1637,6 @@ async function setupGame(mode: GameMode) {
   selectedCard = preparedData.selectedCard;
   printingsBySet = preparedData.printingsBySet;
   correctPrinting = preparedData.correctPrinting;
-  correctFinish = preparedData.correctFinish;
   correctAnswerKeys = new Set(preparedData.correctAnswerKeys);
   correctSetCodes = new Set(preparedData.correctSetCodes);
 
@@ -1668,19 +1645,14 @@ async function setupGame(mode: GameMode) {
   allSets = buildSetsForPrintings(await ensureAllSetsLoaded(), printingsBySet);
   lastSetQuery = "";
   lastSetResults = [];
-  if (currentHardMode) {
-    setTimeline.classList.add("hidden");
-  } else {
-    renderSetTimeline();
-  }
-  guessStatus.textContent = currentHardMode
-    ? "Start typing a set name or code, then choose foil and style to guess."
-    : "Start typing a set name or code to guess.";
+  renderSetTimeline();
+  guessStatus.textContent = "Start typing a set name or code to guess.";
+  updateGuessesRemaining();
 
   if (pendingStoredDailyRecord) {
     const storedRecord = pendingStoredDailyRecord;
     pendingStoredDailyRecord = null;
-    showStoredDailyVictory(storedRecord);
+    showStoredDailyResult(storedRecord);
   }
 }
 
@@ -1698,7 +1670,6 @@ function resetGameState() {
   selectedCard = null;
   printingsBySet = new Map<string, PrintingInfo[]>();
   correctPrinting = null;
-  correctFinish = "nonfoil";
   correctAnswerKeys = new Set<string>();
   correctSetCodes = new Set<string>();
   guessedPrintingKeys.clear();
@@ -1707,6 +1678,8 @@ function resetGameState() {
   lastSetQuery = "";
   lastSetResults = [];
   shareRows = [];
+  guessRecords = [];
+  currentOutcome = null;
   timelineSetIndexByCode.clear();
   clearSetGuess();
   resultsGrid.replaceChildren();
@@ -1719,8 +1692,7 @@ function resetGameState() {
   allPrintingsDetails.open = false;
   guessStatus.textContent = "";
   setGuessInput.disabled = false;
-  finishGuessInput.disabled = false;
-  styleGuessInput.disabled = false;
+  guessesRemaining.classList.remove("hidden");
   setGuessButton.disabled = false;
   giveUpButton.classList.remove("hidden");
   cardFrame.classList.remove(ANSWER_CARD_FRAME_CLASS);
@@ -1736,7 +1708,6 @@ function resetGameState() {
 
 function showLanding() {
   resetGameState();
-  updateStyleGuessVisibility();
   gameArea.classList.add("hidden");
   modeLanding.classList.remove("hidden");
 }
@@ -1752,11 +1723,9 @@ function warmInitialData() {
   });
 }
 
-async function startGame(mode: GameMode, hardMode: boolean) {
+async function startGame(mode: GameMode) {
   currentMode = mode;
-  currentHardMode = hardMode;
   resetGameState();
-  updateStyleGuessVisibility();
   modeLanding.classList.add("hidden");
   gameArea.classList.remove("hidden");
   guessStatus.textContent = "Loading game data…";
@@ -1793,8 +1762,12 @@ homeButton.addEventListener("click", () => {
 });
 
 shareResultsButton.addEventListener("click", () => {
-  const modeLine = currentHardMode ? "\nHard Mode" : "";
-  const shareText = `Priciest Printing${modeLine}\n${shareRows.join("\n")}\n${SHARE_URL}`;
+  const lines: string[] = [];
+  for (let i = 0; i < shareRows.length; i += SHARE_ROW_LENGTH) {
+    lines.push(shareRows.slice(i, i + SHARE_ROW_LENGTH).join(""));
+  }
+  const header = `Priciest Printing ${getScoreText(currentOutcome, shareRows.length)}`;
+  const shareText = `${header}\n${lines.join("\n")}\n${SHARE_URL}`;
   navigator.clipboard.writeText(shareText).then(() => {
     shareResultsButton.textContent = "Copied!";
     setTimeout(() => {
@@ -1818,20 +1791,12 @@ versionPickerModal.addEventListener("click", event => {
 });
 
 startDailyMode.addEventListener("click", () => {
-  currentHardMode = hardModeInput.checked;
-  const savedDailyRecord = getDailyPlayRecord(getTodayKey());
-  if (savedDailyRecord) {
-    pendingStoredDailyRecord = savedDailyRecord;
-    void startGame("daily", currentHardMode);
-    return;
-  }
-  pendingStoredDailyRecord = null;
-  void startGame("daily", currentHardMode);
+  pendingStoredDailyRecord = getDailyPlayRecord(getTodayKey());
+  void startGame("daily");
 });
 
 startPracticeMode.addEventListener("click", () => {
-  currentHardMode = hardModeInput.checked;
-  void startGame("practice", currentHardMode);
+  void startGame("practice");
 });
 
 warmInitialData();
