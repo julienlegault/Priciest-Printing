@@ -7,7 +7,7 @@ import requests
 
 OUTPUT_FILE = "public/formatted_card_list.json"
 SCRYFALL_BULK_DATA_URL = "https://api.scryfall.com/bulk-data"
-PRICE_THRESHOLD = 12.0
+PRICE_THRESHOLD = 20.0
 SCRYFALL_HEADERS = {
     "User-Agent": "Priciest-Printing-pullCards/1.0",
     "Accept": "application/json",
