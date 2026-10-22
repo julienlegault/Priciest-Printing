@@ -26,14 +26,20 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install TypeScript
-        run: npm install -g typescript
+      - name: Install dependencies
+        run: npm ci
 
       - name: Build
         run: |
           mkdir -p dist
           npx tsc --project tsconfig.json
           cp -r public/* dist/
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run end-to-end tests
+        run: npx playwright test
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

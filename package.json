@@ -1,0 +1,12 @@
+{
+  "name": "priciest-printing",
+  "private": true,
+  "scripts": {
+    "build": "tsc --project tsconfig.json && cp -r public/* dist/",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "typescript": "^7.0.2"
+  }
+}
