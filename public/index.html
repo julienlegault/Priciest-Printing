@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Priciest Printing</title>
-  <meta name="description" content="Priciest Printing is a Magic: the Gathering daily game where you guess the most expensive card printing by set, foiling, style, price, and year." />
+  <meta name="description" content="Priciest Printing is a Magic: the Gathering daily game where you guess the most expensive card printing by set, variant, price, and year." />
   <meta name="keywords" content="Priciest Printing, Magic: the Gathering daily game, MTG daily game, MTG price game, card printing game, Scryfall game, TCGPlayer game, collectible card game puzzle, word game alternative, Wordle style game, Asmrandle, Spellify, daily challenge, daily puzzle, guess the card, card set guessing, foil vs nonfoil, borderless, extended art, trading card game trivia, tabletop game puzzle, strategy daily game, browser daily game" />
   <meta name="robots" content="index, follow" />
   <link rel="canonical" href="https://julienlegault.github.io/Priciest-Printing/" />
@@ -29,16 +29,12 @@
         <button id="startDailyMode">Play Daily</button>
         <button id="startPracticeMode">Practice</button>
       </div>
-      <label class="hard-mode-toggle" for="hardModeInput">
-        <input id="hardModeInput" type="checkbox" />
-        <span>Hard Mode</span>
-      </label>
       <section class="how-to-play menu-how-to-play" aria-label="How to play">
         <h2>How to Play</h2>
-        <p>Goal: find the exact printing including foiling with the highest TCGPlayer price for the shown card.</p>
+        <p>Goal: find the set and variant with the highest TCGPlayer price for the shown card.</p>
         <ul>
           <li><strong>Set</strong>: <span role="img" aria-label="Green square">🟩</span> green = correct set, <span role="img" aria-label="Yellow square">🟨</span> yellow = a full word matches the correct set, <span role="img" aria-label="Red square">🟥</span> red = no match.</li>
-          <li><strong># / Variant</strong>: <span role="img" aria-label="Green square">🟩</span> green = foiling correct (and art style in Hard Mode), <span role="img" aria-label="Yellow square">🟨</span> yellow (Hard Mode) = foiling or style partially matches, <span role="img" aria-label="Red square">🟥</span> red = incorrect.</li>
+          <li><strong># / Variant</strong>: <span role="img" aria-label="Green square">🟩</span> green = correct printing, <span role="img" aria-label="Yellow square">🟨</span> yellow = right set but a different variant (borderless, extended art, etc.), <span role="img" aria-label="Red square">🟥</span> red = incorrect.</li>
           <li><strong>Price</strong>: heat-map from <span role="img" aria-label="Green square">🟩</span> green (closest) through <span role="img" aria-label="Yellow square">🟨</span> yellow/<span role="img" aria-label="Orange square">🟧</span> orange to <span role="img" aria-label="Red square">🟥</span> red (farthest); dark box = no printing data.</li>
           <li><strong>Year</strong>: <span role="img" aria-label="Green square">🟩</span> green = exact year, <span role="img" aria-label="Yellow square">🟨</span> yellow = within 2 years, <span role="img" aria-label="Red square">🟥</span> red = farther.</li>
         </ul>
@@ -60,21 +56,13 @@
       <section class="guess-panel">
         <div class="guess-row">
           <input id="setGuessInput" type="text" placeholder="Guess by set name or set code…" autocomplete="off" />
-          <select id="finishGuessInput" aria-label="Select foil or non-foil">
-            <option value="foil">Foil</option>
-            <option value="nonfoil">Non-foil</option>
-          </select>
-          <select id="styleGuessInput" aria-label="Select printing style">
-            <option value="regular">Regular</option>
-            <option value="borderless">Borderless</option>
-            <option value="extendedart">Extended Art</option>
-          </select>
           <button id="setGuessButton">Guess</button>
         </div>
         <ul id="setAutocomplete" class="autocomplete"></ul>
         <p id="guessStatus" class="status" aria-live="polite"></p>
         <button id="giveUpButton" class="give-up-button" type="button">Give Up</button>
       </section>
+      <p id="guessesRemaining" class="guesses-remaining" aria-live="polite"></p>
 
       <section id="allPrintingsSection" class="all-printings hidden">
         <details id="allPrintingsDetails">
@@ -95,10 +83,10 @@
 
       <section class="how-to-play" aria-label="How to play">
         <h2>How to Play</h2>
-        <p>Goal: find the exact printing including foiling with the highest TCGPlayer price for the shown card.</p>
+        <p>Goal: find the set and variant with the highest TCGPlayer price for the shown card.</p>
         <ul>
           <li><strong>Set</strong>: <span role="img" aria-label="Green square">🟩</span> green = correct set, <span role="img" aria-label="Yellow square">🟨</span> yellow = a full word matches the correct set, <span role="img" aria-label="Red square">🟥</span> red = no match.</li>
-          <li><strong># / Variant</strong>: <span role="img" aria-label="Green square">🟩</span> green = foiling correct (and art style in Hard Mode), <span role="img" aria-label="Yellow square">🟨</span> yellow (Hard Mode) = foiling or style partially matches, <span role="img" aria-label="Red square">🟥</span> red = incorrect.</li>
+          <li><strong># / Variant</strong>: <span role="img" aria-label="Green square">🟩</span> green = correct printing, <span role="img" aria-label="Yellow square">🟨</span> yellow = right set but a different variant (borderless, extended art, etc.), <span role="img" aria-label="Red square">🟥</span> red = incorrect.</li>
           <li><strong>Price</strong>: heat-map from <span role="img" aria-label="Green square">🟩</span> green (closest) through <span role="img" aria-label="Yellow square">🟨</span> yellow/<span role="img" aria-label="Orange square">🟧</span> orange to <span role="img" aria-label="Red square">🟥</span> red (farthest); dark box = no printing data.</li>
           <li><strong>Year</strong>: <span role="img" aria-label="Green square">🟩</span> green = exact year, <span role="img" aria-label="Yellow square">🟨</span> yellow = within 2 years, <span role="img" aria-label="Red square">🟥</span> red = farther.</li>
         </ul>
