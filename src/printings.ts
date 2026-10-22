@@ -127,6 +127,8 @@ const allPrintingsDetails = document.getElementById("allPrintingsDetails") as HT
 const allPrintingsGrid = document.getElementById("allPrintingsGrid") as HTMLElement;
 const modeLanding = document.getElementById("modeLanding") as HTMLElement;
 const gameArea = document.getElementById("gameArea") as HTMLElement;
+const howToPlay = document.getElementById("howToPlay") as HTMLElement;
+const gameHowToPlaySlot = document.getElementById("gameHowToPlaySlot") as HTMLElement;
 const startDailyMode = document.getElementById("startDailyMode") as HTMLButtonElement;
 const startPracticeMode = document.getElementById("startPracticeMode") as HTMLButtonElement;
 const shareResultsButton = document.getElementById("shareResultsButton") as HTMLButtonElement;
@@ -1712,6 +1714,8 @@ function resetGameState() {
 
 function showLanding() {
   resetGameState();
+  modeLanding.appendChild(howToPlay);
+  howToPlay.classList.add("menu-how-to-play");
   gameArea.classList.add("hidden");
   modeLanding.classList.remove("hidden");
 }
@@ -1730,6 +1734,8 @@ function warmInitialData() {
 async function startGame(mode: GameMode) {
   currentMode = mode;
   resetGameState();
+  gameHowToPlaySlot.appendChild(howToPlay);
+  howToPlay.classList.remove("menu-how-to-play");
   modeLanding.classList.add("hidden");
   gameArea.classList.remove("hidden");
   guessStatus.textContent = "Loading game data…";
@@ -1770,13 +1776,13 @@ shareResultsButton.addEventListener("click", () => {
   for (let i = 0; i < shareRows.length; i += SHARE_ROW_LENGTH) {
     lines.push(shareRows.slice(i, i + SHARE_ROW_LENGTH).join(""));
   }
-  let header = `Priciest Printing ${getScoreText(currentOutcome, shareRows.length)}`;
-  if (currentOutcome === "gaveup") {
-    header += " - Gave up";
-  } else if (currentOutcome === "loss") {
-    header += " - Ran out of guesses";
-  }
-  const shareText = `${header}\n${lines.join("\n")}\n${SHARE_URL}`;
+  const header = `Priciest Printing ${getScoreText(currentOutcome, shareRows.length)}`;
+  const outcomeMessage = currentOutcome === "gaveup"
+    ? `I gave up after ${shareRows.length} tries`
+    : currentOutcome === "loss"
+      ? "I ran out of guesses!"
+      : "";
+  const shareText = `${header}${outcomeMessage ? `\n${outcomeMessage}` : ""}\n${lines.join("\n")}\n${SHARE_URL}`;
   navigator.clipboard.writeText(shareText).then(() => {
     shareResultsButton.textContent = "Copied!";
     setTimeout(() => {
