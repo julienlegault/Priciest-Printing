@@ -2,6 +2,12 @@ import { MAX_GUESSES, expect, getAnswer, getSuggestions, getWrongSets, guessSet,
 
 test.setTimeout(240_000);
 
+test("share and give up buttons use their intended colors", async ({ page }) => {
+  await page.goto("/index.html");
+  await expect(page.locator("#shareResultsButton")).toHaveCSS("background-color", "rgb(68, 0, 226)");
+  await expect(page.locator("#giveUpButton")).toHaveCSS("background-color", "rgb(244, 68, 10)");
+});
+
 test("footer shows social links and the fan content disclaimer", async ({ page }) => {
   for (const width of [375, 1280]) {
     await page.setViewportSize({ width, height: 800 });

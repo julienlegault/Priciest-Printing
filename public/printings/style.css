@@ -570,6 +570,10 @@ button:hover {
   filter: brightness(1.08);
 }
 
+#shareResultsButton {
+  background: #4400e2;
+}
+
 .autocomplete {
   list-style: none;
   margin: 6px 0 0;
@@ -602,6 +606,7 @@ button:hover {
 .give-up-button {
   display: block;
   margin: 10px auto 0;
+  background: var(--accent-orange);
 }
 
 .results {
