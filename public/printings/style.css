@@ -50,12 +50,11 @@ body {
 }
 
 .mode-actions button {
-  min-width: min(100%, 320px);
-  padding: 18px 24px;
-  font-size: 2.35rem;
-  border-radius: 8px;
+  padding: 10px 20px;
+  font-size: 1.2em;
+  border-radius: 5px;
   border: 0;
-  line-height: 1;
+  margin: 10px;
   transition: background-color 0.3s;
 }
 
