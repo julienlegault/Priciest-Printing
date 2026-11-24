@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "build": "tsc --project tsconfig.json && cp -r public/* dist/",
+    "serve": "python3 -m http.server 4173 --bind 127.0.0.1 --directory dist",
     "test:e2e": "playwright test"
   },
   "devDependencies": {

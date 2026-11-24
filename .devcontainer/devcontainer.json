@@ -1,0 +1,13 @@
+{
+  "name": "Priciest Printing",
+  "image": "mcr.microsoft.com/devcontainers/universal:2",
+  "postCreateCommand": "npm ci",
+  "postStartCommand": "npm run build && setsid --fork npm run serve > /tmp/priciest-printing-server.log 2>&1 && (for attempt in 1 2 3 4 5; do if curl --fail --silent http://127.0.0.1:4173/index.html -o /dev/null; then exit 0; fi; sleep 1; done; cat /tmp/priciest-printing-server.log; exit 1)",
+  "forwardPorts": [4173],
+  "portsAttributes": {
+    "4173": {
+      "label": "Priciest Printing",
+      "onAutoForward": "openBrowser"
+    }
+  }
+}
