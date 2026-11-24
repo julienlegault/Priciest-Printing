@@ -54,7 +54,6 @@ body {
   font-size: 1.2em;
   border-radius: 5px;
   border: 0;
-  margin: 10px;
   transition: background-color 0.3s;
 }
 
@@ -74,6 +73,69 @@ body {
   background: #df743a;
 }
 
+      .footer {
+        position: static; /* Normal flow on narrow screens */
+        margin-top: 50px;
+      }
+
+  /* Footer styles */
+    .footer {
+      margin-top: 50px;
+      padding: 20px;
+      color: #ccc;
+      font-size: 0.65em;
+      border-top: 1px solid #444;
+      max-width: 600px;
+      margin-left: auto;
+      margin-right: auto;
+      text-align: center;
+    }
+
+    /* Footer positioning for medium screens */
+    @media (min-width: 551px) and (max-width: 1279px) {
+      .footer {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        margin-top: 0;
+        background: #111;
+        border-top: 1px solid #444;
+        max-width: 100%;
+        z-index: 1000;
+      }
+    }
+    
+    /* Footer positioning for wide screens */
+    @media (min-width: 1280px) {
+      .footer {
+        position: fixed;
+        bottom: 0;
+        left: 50%;
+        transform: translateX(-50%);
+        margin-top: 0;
+        background: #111;
+        border-top: 1px solid #444;
+        max-width: 800px;
+        z-index: 1000;
+      }
+    }
+    .footer a {
+      color: #ccc;
+      text-decoration: none;
+      margin-right: 10px;
+    }
+    .footer a img {
+      width: 24px;
+      height: 24px;
+      vertical-align: middle;
+    }
+    .footer p {
+      margin-top: 10px;
+      line-height: 1.4;
+    }
+
+    
 .card-frame {
   --frame-padding-top: 16.72px;    /* 3.98% × var(--card-max-width) */
   --frame-padding-x: 21.42px;      /* 5.1%  × var(--card-max-width) */

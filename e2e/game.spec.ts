@@ -2,6 +2,27 @@ import { MAX_GUESSES, expect, getAnswer, getSuggestions, getWrongSets, guessSet,
 
 test.setTimeout(240_000);
 
+test("footer shows social links and the fan content disclaimer", async ({ page }) => {
+  for (const width of [375, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto("/index.html");
+
+    const footer = page.locator("footer");
+    const linkedIn = footer.getByRole("link", { name: "LinkedIn" });
+    const github = footer.getByRole("link", { name: "GitHub" });
+    await expect(linkedIn).toHaveAttribute("href", "https://www.linkedin.com/in/julienplegault/");
+    await expect(github).toHaveAttribute("href", "https://github.com/julienlegault/Priciest-Printing");
+    for (const link of [linkedIn, github]) {
+      await expect(link).toHaveAttribute("target", "_blank");
+      await expect(link).toHaveAttribute("rel", "noopener noreferrer");
+      await expect.poll(() => link.locator("img").evaluate((image: HTMLImageElement) => image.naturalWidth)).toBeGreaterThan(0);
+    }
+    await expect(footer).toContainText("Portions of Priciest Printing are unofficial Fan Content");
+    await expect(footer).toContainText("Priciest Printing is not produced by or endorsed by Wizards of the Coast.");
+    await expect(footer).not.toContainText("Asmrandle");
+  }
+});
+
 test("daily run: 5 incorrect guesses then correct, share reflects the guesses", async ({ page, browser }) => {
   const answer = await getAnswer(browser, "daily");
   await startMode(page, "daily");
