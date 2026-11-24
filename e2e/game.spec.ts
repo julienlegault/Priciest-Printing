@@ -29,6 +29,21 @@ test("footer shows social links and the fan content disclaimer", async ({ page }
   }
 });
 
+test("the loaded game's how-to-play box stays above the footer", async ({ page }) => {
+  await startMode(page, "practice");
+
+  for (const width of [375, 768, 1280]) {
+    await page.setViewportSize({ width, height: 800 });
+    const help = page.locator("#gameHowToPlaySlot .how-to-play");
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    const helpBox = await help.boundingBox();
+    const footerBox = await page.locator("footer").boundingBox();
+    expect(helpBox).not.toBeNull();
+    expect(footerBox).not.toBeNull();
+    expect(footerBox!.y).toBeGreaterThanOrEqual(helpBox!.y + helpBox!.height);
+  }
+});
+
 test("daily run: 5 incorrect guesses then correct, share reflects the guesses", async ({ page, browser }) => {
   const answer = await getAnswer(browser, "daily");
   await startMode(page, "daily");
